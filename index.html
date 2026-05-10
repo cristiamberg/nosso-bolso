@@ -12,7 +12,7 @@
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
     <style>
-        /* Oculta a barra de rolagem mas permite o scroll (Estilo Tailwind hide-scrollbar) */
+        /* Oculta a barra de rolagem mas permite o scroll */
         .hide-scrollbar::-webkit-scrollbar { display: none; }
         .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
     </style>
@@ -22,16 +22,15 @@
 
     <!-- Nosso App React como um Módulo -->
     <script type="text/babel" data-type="module">
-        // Importando React e ReactDOM direto da nuvem
         import React, { useState, useMemo, useRef, useEffect } from 'https://esm.sh/react@18';
         import { createRoot } from 'https://esm.sh/react-dom@18/client';
         
-        // Importando Firebase direto da nuvem
+        // Importando Firebase
         import { initializeApp } from 'https://esm.sh/firebase@10.8.1/app';
         import { getAuth, signInAnonymously, onAuthStateChanged } from 'https://esm.sh/firebase@10.8.1/auth';
         import { getFirestore, collection, doc, setDoc, addDoc, updateDoc, deleteDoc, onSnapshot, serverTimestamp } from 'https://esm.sh/firebase@10.8.1/firestore';
         
-        // Importando Ícones
+        // Importando Ícones em pacote único (bundle) para não travar a tela
         import { 
             Home, ReceiptText, Target, Plus, Plane, CreditCard, 
             ShoppingCart, Utensils, Zap, Car, Heart, TrendingUp, X, 
@@ -39,7 +38,7 @@
             Flower, Sparkles, Camera, CalendarHeart, Clock, CalendarDays, 
             Trash2, Pencil, AlertCircle, ImagePlus, Flame, PiggyBank, 
             CheckCircle2, Circle, ListTodo, Trophy, Settings
-        } from 'https://esm.sh/lucide-react@0.344.0';
+        } from 'https://esm.sh/lucide-react@0.344.0?bundle';
 
         // --- CONFIGURAÇÃO DO FIREBASE ---
         const firebaseConfig = {
@@ -131,7 +130,7 @@
                 { id: 'pix', name: 'Pix / Dinheiro', color: 'bg-emerald-400' },
             ];
 
-            // 1. Autenticação Segura
+            // 1. Autenticação Segura (Roda no fundo)
             useEffect(() => {
                 const initAuth = async () => {
                     try {
@@ -291,7 +290,6 @@
                 setIsSettingsModalOpen(false);
             }
 
-            // Telas de Loading / Erro
             if (authError) return (
                 <div className="flex flex-col h-screen items-center justify-center bg-rose-50 p-6 text-center">
                     <AlertCircle className="w-16 h-16 text-rose-500 mb-4" />
@@ -300,15 +298,11 @@
                 </div>
             );
 
-            if (!user) return (
-                <div className="flex flex-col h-screen items-center justify-center bg-pink-50 text-pink-500">
-                    <Flower className="w-12 h-12 mb-4 animate-spin" />
-                    <span className="font-bold animate-pulse text-xl">Preparando Nosso Bolso... 🌸</span>
-                </div>
-            );
+            // A tela de "Loading" que travava o render foi removida!
+            // O app agora renderiza toda a estrutura base imediatamente.
 
             return (
-                <div className="fixed inset-0 w-full h-[100dvh] bg-pink-50 flex justify-center font-sans text-slate-800 select-none overflow-hidden sm:p-6 sm:items-center">
+                <div className="fixed inset-0 w-full h-[100dvh] bg-pink-50 flex justify-center font-sans text-slate-800 select-none overflow-hidden sm:p-6 sm:items-center animate-in fade-in duration-500">
                     <div className="w-full h-full sm:h-[90dvh] max-w-md bg-white flex flex-col relative shadow-2xl sm:rounded-[3rem] sm:border-[8px] sm:border-pink-100">
                         
                         <header className="shrink-0 bg-gradient-to-r from-pink-400 to-rose-300 text-white p-6 pb-8 z-20 border-b-4 border-pink-200">
@@ -335,7 +329,7 @@
                         <main className="flex-1 overflow-y-auto hide-scrollbar p-4 pb-32 -mt-4 bg-white z-10 pt-8">
                             
                             {activeTab === 'dashboard' && (
-                                <div className="space-y-5">
+                                <div className="space-y-5 animate-in fade-in duration-300">
                                     <div className="flex justify-between items-center bg-white p-2 rounded-full border border-pink-100 shadow-sm">
                                         <button onClick={() => { const [y, m] = selectedMonth.split('-'); const d = new Date(y, m-2); setSelectedMonth(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`); }} className="p-3 bg-pink-50 rounded-full text-pink-500 active:scale-90"><ChevronLeft/></button>
                                         <span className="font-bold capitalize">{formatDateSafe(`${selectedMonth}-02`).split(' de ').slice(1).join(' de ')}</span>
@@ -360,7 +354,7 @@
                                             <button onClick={() => setIsAddBudgetModalOpen(true)} className="p-1.5 bg-pink-50 text-pink-500 rounded-full active:scale-90 transition-transform"><Plus className="w-4 h-4" /></button>
                                         </div>
                                         <div className="space-y-4">
-                                            {(budgets || []).length === 0 && <p className="text-xs text-slate-400 text-center py-2">Nenhum alerta criado.</p>}
+                                            {(!budgets || budgets.length === 0) && <p className="text-xs text-slate-400 text-center py-2">Nenhum alerta criado.</p>}
                                             {(budgets || []).map(b => {
                                                 const spent = categoryTotals[b.category] || 0;
                                                 const pct = Math.min(100, Math.round((spent / b.limit) * 100) || 0);
@@ -398,9 +392,9 @@
                             )}
 
                             {activeTab === 'transactions' && (
-                                <div className="space-y-4">
+                                <div className="space-y-4 animate-in fade-in duration-300">
                                     <h2 className="text-xl font-bold text-pink-600 px-1">Diário de Gastos 📸</h2>
-                                    {(transactions || []).length === 0 && <p className="text-sm text-slate-400 text-center mt-10">Nenhum gasto registrado neste mês.</p>}
+                                    {(!transactions || transactions.length === 0) && <p className="text-sm text-slate-400 text-center mt-10">Nenhum gasto registrado neste mês.</p>}
                                     {(transactions || []).slice().sort((a,b) => new Date(b.date||0) - new Date(a.date||0)).map(t => (
                                         <div key={t.id} className="bg-white p-4 rounded-3xl shadow-sm border border-pink-50 relative group">
                                             <div className="flex justify-between items-center mb-2">
@@ -428,14 +422,14 @@
                             )}
 
                             {activeTab === 'goals' && (
-                                <div className="space-y-8">
+                                <div className="space-y-8 animate-in fade-in duration-300">
                                     <div className="space-y-4">
                                         <div className="flex justify-between items-center">
                                             <h2 className="text-xl font-bold text-purple-600 flex items-center gap-2"><Flame className="w-5 h-5"/> Desafios do Casal</h2>
                                             <button onClick={() => setIsAddChallengeModalOpen(true)} className="text-xs font-bold text-purple-500 bg-purple-50 px-4 py-2 rounded-full shadow-sm active:scale-95">+ Novo</button>
                                         </div>
                                         <div className="grid grid-cols-2 gap-3">
-                                            {(challenges || []).length === 0 && <p className="text-xs text-slate-400 col-span-2">Crie desafios para economizar juntos!</p>}
+                                            {(!challenges || challenges.length === 0) && <p className="text-xs text-slate-400 col-span-2">Crie desafios para economizar juntos!</p>}
                                             {(challenges || []).map(c => {
                                                 const done = c.progress >= c.target;
                                                 return (
@@ -487,7 +481,7 @@
                             )}
 
                             {activeTab === 'dates' && (
-                                <div className="space-y-6">
+                                <div className="space-y-6 animate-in fade-in duration-300">
                                     <div className="bg-gradient-to-br from-pink-500 to-rose-400 p-8 rounded-[2.5rem] shadow-xl text-white text-center border-b-4 border-pink-300 relative overflow-hidden">
                                         <p className="text-[10px] font-black uppercase tracking-widest mb-2 opacity-80 flex items-center justify-center gap-1"><Clock className="w-3 h-3"/> Nossa História</p>
                                         <h2 className="text-4xl font-black mb-1 tracking-tighter">Vivendo o Amor</h2>
@@ -498,7 +492,7 @@
                                         <button onClick={() => setIsAddDateModalOpen(true)} className="text-sm font-bold text-pink-500 bg-pink-50 px-4 py-2 rounded-full shadow-sm active:scale-95">+ Adicionar</button>
                                     </div>
                                     <div className="space-y-3">
-                                        {(dates || []).length === 0 && <p className="text-sm text-slate-400 text-center py-4">Nenhuma data cadastrada.</p>}
+                                        {(!dates || dates.length === 0) && <p className="text-sm text-slate-400 text-center py-4">Nenhuma data cadastrada.</p>}
                                         {(dates || []).map(item => (
                                             <div key={item.id} className="bg-white p-4 rounded-[1.5rem] shadow-sm border border-pink-50 flex items-center justify-between group relative">
                                                 <div className="flex items-center gap-4">
@@ -516,13 +510,13 @@
                             )}
 
                             {activeTab === 'subscriptions' && (
-                                <div className="space-y-6">
+                                <div className="space-y-6 animate-in fade-in duration-300">
                                     <div className="flex justify-between items-center px-1">
                                         <h2 className="text-xl font-bold text-pink-600 flex items-center gap-2"><Repeat className="w-5 h-5"/> Despesas Fixas</h2>
                                         <button onClick={() => setIsAddSubModalOpen(true)} className="text-sm font-bold text-pink-500 bg-pink-50 px-4 py-2 rounded-full shadow-sm active:scale-95">+ Novo</button>
                                     </div>
                                     <div className="bg-white rounded-[2.5rem] overflow-hidden border border-pink-50 shadow-lg">
-                                        {(subscriptions || []).length === 0 && <p className="text-sm text-slate-400 text-center py-8">Nenhuma despesa fixa registrada.</p>}
+                                        {(!subscriptions || subscriptions.length === 0) && <p className="text-sm text-slate-400 text-center py-8">Nenhuma despesa fixa registrada.</p>}
                                         {(subscriptions || []).map(s => (
                                             <div key={s.id} className="p-5 border-b border-pink-50 flex justify-between items-center group hover:bg-pink-50/30 transition-colors">
                                                 <div className="flex items-center gap-3">
@@ -538,7 +532,7 @@
                                                 </div>
                                             </div>
                                         ))}
-                                        {subscriptions.length > 0 && (
+                                        {subscriptions && subscriptions.length > 0 && (
                                             <div className="bg-pink-50/50 p-6 flex justify-between items-center border-t border-pink-100">
                                                 <span className="font-bold text-pink-600">Total Mensal</span>
                                                 <span className="text-xl font-black text-pink-600">{format(subscriptions.reduce((acc, s) => acc + (parseFloat(s.amount)||0), 0))}</span>
