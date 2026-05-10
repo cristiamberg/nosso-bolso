@@ -1,0 +1,716 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Nosso Bolso 🌸</title>
+    
+    <!-- Tailwind CSS (Estilos) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Babel (Tradução do JSX para o Navegador) -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <style>
+        /* Oculta a barra de rolagem mas permite o scroll (Estilo Tailwind hide-scrollbar) */
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    </style>
+</head>
+<body class="bg-pink-50">
+    <div id="root"></div>
+
+    <!-- Nosso App React como um Módulo -->
+    <script type="text/babel" data-type="module">
+        // Importando React e ReactDOM direto da nuvem
+        import React, { useState, useMemo, useRef, useEffect } from 'https://esm.sh/react@18';
+        import { createRoot } from 'https://esm.sh/react-dom@18/client';
+        
+        // Importando Firebase direto da nuvem
+        import { initializeApp } from 'https://esm.sh/firebase@10.8.1/app';
+        import { getAuth, signInAnonymously, onAuthStateChanged } from 'https://esm.sh/firebase@10.8.1/auth';
+        import { getFirestore, collection, doc, setDoc, addDoc, updateDoc, deleteDoc, onSnapshot, serverTimestamp } from 'https://esm.sh/firebase@10.8.1/firestore';
+        
+        // Importando Ícones
+        import { 
+            Home, ReceiptText, Target, Plus, Plane, CreditCard, 
+            ShoppingCart, Utensils, Zap, Car, Heart, TrendingUp, X, 
+            Users, ChevronLeft, ChevronRight, Repeat, Gift, 
+            Flower, Sparkles, Camera, CalendarHeart, Clock, CalendarDays, 
+            Trash2, Pencil, AlertCircle, ImagePlus, Flame, PiggyBank, 
+            CheckCircle2, Circle, ListTodo, Trophy, Settings
+        } from 'https://esm.sh/lucide-react@0.344.0';
+
+        // --- CONFIGURAÇÃO DO FIREBASE ---
+        const firebaseConfig = {
+            apiKey: "AIzaSyDyWO6W5AEscA061bwG91u68TfX2FVycek",
+            authDomain: "nosso-bolso-d88a0.firebaseapp.com",
+            projectId: "nosso-bolso-d88a0",
+            storageBucket: "nosso-bolso-d88a0.firebasestorage.app",
+            messagingSenderId: "101766584028",
+            appId: "1:101766584028:web:f97ced5cc5a84170e98619"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        const appId = "nosso-bolso-v2"; // Banco de dados
+
+        // --- UTILITÁRIO DE COMPRESSÃO DE IMAGEM ---
+        const compressImage = (file, maxWidth = 800) => {
+            return new Promise((resolve) => {
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    const img = new Image();
+                    img.onload = () => {
+                        const canvas = document.createElement('canvas');
+                        const scale = Math.min(maxWidth / img.width, 1);
+                        canvas.width = img.width * scale;
+                        canvas.height = img.height * scale;
+                        const ctx = canvas.getContext('2d');
+                        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                        resolve(canvas.toDataURL('image/jpeg', 0.6));
+                    };
+                    img.src = event.target.result;
+                };
+                reader.readAsDataURL(file);
+            });
+        };
+
+        function App() {
+            const [user, setUser] = useState(null);
+            const [authError, setAuthError] = useState(null);
+            const [activeTab, setActiveTab] = useState('dashboard');
+            
+            // Modais
+            const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+            const [isAddChallengeModalOpen, setIsAddChallengeModalOpen] = useState(false);
+            const [isAddSubModalOpen, setIsAddSubModalOpen] = useState(false);
+            const [isAddDateModalOpen, setIsAddDateModalOpen] = useState(false);
+            const [isAddBudgetModalOpen, setIsAddBudgetModalOpen] = useState(false);
+            const [showMimoModal, setShowMimoModal] = useState(false);
+            const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
+
+            // Dados Sincronizados
+            const [transactions, setTransactions] = useState([]);
+            const [goals, setGoals] = useState([]);
+            const [subscriptions, setSubscriptions] = useState([]);
+            const [specialDates, setSpecialDates] = useState([]);
+            const [challenges, setChallenges] = useState([]);
+            const [wishlist, setWishlist] = useState([]);
+            const [budgets, setBudgets] = useState([]);
+            const [settings, setSettings] = useState({ 
+                user1Name: 'Samile', 
+                user2Name: 'Cristiamberg', 
+                couplePhoto: null, 
+                startDate: '2023-06-12' 
+            });
+
+            // Estado dos Formulários
+            const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
+            const [mimoTitle, setMimoTitle] = useState('');
+            const [selectedChallengeIcon, setSelectedChallengeIcon] = useState('Flame');
+            const [wishlistInput, setWishlistInput] = useState('');
+            const [wishlistWho, setWishlistWho] = useState('user1');
+            const [transactionPhoto, setTransactionPhoto] = useState(null);
+            const [editingTxIdForPhoto, setEditingTxIdForPhoto] = useState(null);
+            const [dateFormIsYearly, setDateFormIsYearly] = useState(true);
+
+            const fileInputRef = useRef(null);
+            const receiptInputRef = useRef(null);
+            const editPhotoInputRef = useRef(null);
+
+            const user1Name = settings.user1Name || "Usuário 1";
+            const user2Name = settings.user2Name || "Usuário 2";
+
+            const cards = [
+                { id: 'nubank', name: 'Nubank', color: 'bg-purple-400' },
+                { id: 'santander', name: 'Santander', color: 'bg-red-400' },
+                { id: 'mercadopago', name: 'Mercado Pago', color: 'bg-sky-400' },
+                { id: 'caju', name: 'Caju', color: 'bg-rose-400' },
+                { id: 'pix', name: 'Pix / Dinheiro', color: 'bg-emerald-400' },
+            ];
+
+            // 1. Autenticação Segura
+            useEffect(() => {
+                const initAuth = async () => {
+                    try {
+                        await signInAnonymously(auth);
+                    } catch (err) {
+                        console.error("Erro na Autenticação:", err);
+                        setAuthError("Ative o Login Anônimo no Firebase > Authentication > Sign-in method");
+                    }
+                };
+                initAuth();
+                const unsubscribe = onAuthStateChanged(auth, setUser);
+                return () => unsubscribe();
+            }, []);
+
+            // 2. Sincronização de Dados
+            useEffect(() => {
+                if (!user) return;
+                
+                const collections = [
+                    { name: 'transactions', setter: setTransactions },
+                    { name: 'goals', setter: setGoals },
+                    { name: 'subscriptions', setter: setSubscriptions },
+                    { name: 'specialDates', setter: setSpecialDates },
+                    { name: 'challenges', setter: setChallenges },
+                    { name: 'wishlist', setter: setWishlist },
+                    { name: 'budgets', setter: setBudgets }
+                ];
+
+                const unsubs = collections.map(col => {
+                    const q = collection(db, 'artifacts', appId, 'public', 'data', col.name);
+                    return onSnapshot(q, 
+                        (snap) => {
+                            const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+                            col.setter(data);
+                        }, 
+                        (err) => console.error(`Erro ao carregar ${col.name}:`, err)
+                    );
+                });
+
+                const unsubSet = onSnapshot(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'profile'), 
+                    (snap) => {
+                        if (snap.exists()) setSettings(prev => ({ ...prev, ...snap.data() }));
+                    }, 
+                    (err) => console.error("Erro configurações:", err)
+                );
+
+                return () => { 
+                    unsubs.forEach(u => u()); 
+                    unsubSet(); 
+                };
+            }, [user]);
+
+            // Funções de Banco de Dados Helper
+            const saveDoc = async (colName, data) => {
+                try {
+                    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', colName), { 
+                        ...data, createdAt: serverTimestamp() 
+                    });
+                } catch (err) { console.error(`Erro ao salvar em ${colName}:`, err); }
+            };
+
+            const delDoc = async (colName, id) => {
+                try { await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', colName, id)); } 
+                catch (err) { console.error(`Erro ao deletar de ${colName}:`, err); }
+            };
+
+            const updDoc = async (colName, id, data) => {
+                try { await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', colName, id), data); } 
+                catch (err) { console.error(`Erro ao atualizar em ${colName}:`, err); }
+            };
+
+            // Cálculos Derivados
+            const stats = useMemo(() => {
+                let u1PS = 0; let u2PS = 0; let u1M = 0; let u2M = 0;
+                const safeTrans = transactions || [];
+                const safeSubs = subscriptions || [];
+
+                safeTrans.filter(t => t?.date?.startsWith(selectedMonth)).forEach(t => {
+                    const a = parseFloat(t.amount) || 0;
+                    if (t.split === 'shared') { if(t.paidBy === 'user1') u1PS += a; else u2PS += a; }
+                    else if (t.split === 'mimo') { if(t.paidBy === 'user1') u1M += a; else u2M += a; }
+                });
+
+                safeSubs.forEach(s => {
+                    const a = parseFloat(s.amount) || 0;
+                    if (s.split === 'shared') { if(s.paidBy === 'user1') u1PS += a; else u2PS += a; }
+                });
+
+                const shared = u1PS + u2PS;
+                return { total: shared, u1PS, u2PS, u1Bal: (u1PS - (shared/2)) + u1M - u2M, u2Bal: (u2PS - (shared/2)) + u2M - u1M };
+            }, [transactions, subscriptions, selectedMonth]);
+
+            const categoryTotals = useMemo(() => {
+                const totals = {};
+                (transactions || []).filter(t => t?.date?.startsWith(selectedMonth)).forEach(t => {
+                    totals[t.category] = (totals[t.category] || 0) + (parseFloat(t.amount) || 0);
+                });
+                return totals;
+            }, [transactions, selectedMonth]);
+
+            const dates = useMemo(() => {
+                const today = new Date(); today.setHours(0,0,0,0);
+                return (specialDates || []).map(d => {
+                    let target = new Date(d.date ? `${d.date}T00:00:00` : today);
+                    if (isNaN(target)) target = new Date();
+                    if(d.isYearly){ target.setFullYear(today.getFullYear()); if(target < today) target.setFullYear(today.getFullYear() + 1); }
+                    return { ...d, days: Math.max(0, Math.ceil((target - today)/(1000*60*60*24))), next: target };
+                }).sort((a,b) => a.days - b.days);
+            }, [specialDates]);
+
+            const format = (v) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(parseFloat(v) || 0);
+            const formatDateSafe = (dateString) => {
+                if (!dateString) return '';
+                const d = new Date(dateString);
+                return isNaN(d) ? '' : d.toLocaleDateString('pt-BR');
+            };
+
+            const getCategoryIcon = (cat) => {
+                const icons = { Alimentação: <Utensils/>, Contas: <Zap/>, Transporte: <Car/>, Viagem: <Plane/>, Lazer: <Heart/> };
+                return React.cloneElement(icons[cat] || <ShoppingCart/>, { className: "w-5 h-5 text-pink-400" });
+            };
+
+            // Handlers de Ação
+            const handlePhotoUpload = async (e, type, id = null) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                try {
+                    const compressedBase64 = await compressImage(file);
+                    if (type === 'profile') await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'profile'), { ...settings, couplePhoto: compressedBase64 }, {merge:true});
+                    else if (type === 'newTransaction') setTransactionPhoto(compressedBase64);
+                    else if (type === 'editTransaction' && id) { await updDoc('transactions', id, { photo: compressedBase64 }); setEditingTxIdForPhoto(null); }
+                } catch (err) { console.error("Erro ao processar imagem", err); }
+            };
+
+            const handleSaveTransaction = async (e) => {
+                e.preventDefault(); const fd = new FormData(e.target);
+                await saveDoc('transactions', {
+                    title: fd.get('title'), amount: parseFloat(fd.get('amount')) || 0, date: fd.get('date'),
+                    category: fd.get('category'), paidBy: fd.get('paidBy'), split: fd.get('split'), cardId: fd.get('cardId'), photo: transactionPhoto
+                });
+                setIsAddModalOpen(false); setTransactionPhoto(null);
+            };
+
+            const handlePayWithMimoSubmit = async (e) => {
+                e.preventDefault(); const fd = new FormData(e.target);
+                const amount = parseFloat(fd.get('amount')) || 0;
+                const title = fd.get('title') || 'Mimo Especial';
+                const debtor = stats.u1Bal > 0 ? 'user2' : 'user1';
+                await saveDoc('transactions', { title: `Mimo 🎁: ${title}`, amount, date: new Date().toISOString().split('T')[0], category: 'Lazer', paidBy: debtor, split: 'mimo', cardId: 'pix', photo: null });
+                setShowMimoModal(false); setMimoTitle('');
+            };
+
+            const handleSaveSettings = async (e) => {
+                e.preventDefault(); const fd = new FormData(e.target);
+                const newSettings = { user1Name: fd.get('user1Name'), user2Name: fd.get('user2Name'), startDate: fd.get('startDate') };
+                await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'profile'), { ...settings, ...newSettings }, {merge:true});
+                setIsSettingsModalOpen(false);
+            }
+
+            // Telas de Loading / Erro
+            if (authError) return (
+                <div className="flex flex-col h-screen items-center justify-center bg-rose-50 p-6 text-center">
+                    <AlertCircle className="w-16 h-16 text-rose-500 mb-4" />
+                    <h2 className="text-xl font-black text-rose-600 mb-2">Acesso Negado</h2>
+                    <p className="text-slate-600 font-medium">{authError}</p>
+                </div>
+            );
+
+            if (!user) return (
+                <div className="flex flex-col h-screen items-center justify-center bg-pink-50 text-pink-500">
+                    <Flower className="w-12 h-12 mb-4 animate-spin" />
+                    <span className="font-bold animate-pulse text-xl">Preparando Nosso Bolso... 🌸</span>
+                </div>
+            );
+
+            return (
+                <div className="fixed inset-0 w-full h-[100dvh] bg-pink-50 flex justify-center font-sans text-slate-800 select-none overflow-hidden sm:p-6 sm:items-center">
+                    <div className="w-full h-full sm:h-[90dvh] max-w-md bg-white flex flex-col relative shadow-2xl sm:rounded-[3rem] sm:border-[8px] sm:border-pink-100">
+                        
+                        <header className="shrink-0 bg-gradient-to-r from-pink-400 to-rose-300 text-white p-6 pb-8 z-20 border-b-4 border-pink-200">
+                            <div className="flex justify-between items-center">
+                                <div className="flex flex-col">
+                                    <h1 className="text-2xl font-bold flex items-center gap-2 tracking-tight">
+                                        <Flower className="w-6 h-6 fill-white" /> Nosso Bolso <Sparkles className="w-4 h-4 text-yellow-200" />
+                                    </h1>
+                                    <button onClick={() => setIsSettingsModalOpen(true)} className="flex items-center gap-1 text-xs mt-1 text-pink-100 hover:text-white transition-colors">
+                                        <Settings className="w-3 h-3" /> Configurações
+                                    </button>
+                                </div>
+                                <div className="relative cursor-pointer active:scale-95 transition-transform" onClick={() => fileInputRef.current?.click()}>
+                                    <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-white/60 bg-white/30 flex items-center justify-center shadow-inner">
+                                        {settings?.couplePhoto ? <img src={settings.couplePhoto} className="w-full h-full object-cover" alt="Perfil" /> : <Users className="text-white w-6 h-6" />}
+                                    </div>
+                                    <div className="absolute -bottom-1 -right-1 bg-pink-500 rounded-full p-1 border-2 border-white"><Camera className="w-3 h-3 text-white" /></div>
+                                </div>
+                                <input type="file" ref={fileInputRef} onChange={(e) => handlePhotoUpload(e, 'profile')} className="hidden" accept="image/*" />
+                                <input type="file" ref={editPhotoInputRef} onChange={(e) => handlePhotoUpload(e, 'editTransaction', editingTxIdForPhoto)} className="hidden" accept="image/*" />
+                            </div>
+                        </header>
+
+                        <main className="flex-1 overflow-y-auto hide-scrollbar p-4 pb-32 -mt-4 bg-white z-10 pt-8">
+                            
+                            {activeTab === 'dashboard' && (
+                                <div className="space-y-5">
+                                    <div className="flex justify-between items-center bg-white p-2 rounded-full border border-pink-100 shadow-sm">
+                                        <button onClick={() => { const [y, m] = selectedMonth.split('-'); const d = new Date(y, m-2); setSelectedMonth(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`); }} className="p-3 bg-pink-50 rounded-full text-pink-500 active:scale-90"><ChevronLeft/></button>
+                                        <span className="font-bold capitalize">{formatDateSafe(`${selectedMonth}-02`).split(' de ').slice(1).join(' de ')}</span>
+                                        <button onClick={() => { const [y, m] = selectedMonth.split('-'); const d = new Date(y, m); setSelectedMonth(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`); }} className="p-3 bg-pink-50 rounded-full text-pink-500 active:scale-90"><ChevronRight/></button>
+                                    </div>
+
+                                    <div className="bg-white border border-pink-100 p-5 rounded-[2rem] shadow-sm">
+                                        <h2 className="text-lg font-bold mb-4 text-pink-600 flex items-center gap-2"><TrendingUp className="w-5 h-5"/> Acerto de Contas</h2>
+                                        <div className={`p-4 rounded-2xl text-center font-bold text-sm ${stats.u1Bal > 0 ? 'bg-rose-50 text-rose-600 border border-rose-100' : stats.u2Bal > 0 ? 'bg-pink-50 text-pink-600 border border-pink-100' : 'bg-slate-50 text-slate-500'}`}>
+                                            {stats.u1Bal > 0 ? `🎀 ${user2Name} deve ${format(Math.abs(stats.u2Bal))} para ${user1Name}` : stats.u2Bal > 0 ? `🎀 ${user1Name} deve ${format(Math.abs(stats.u1Bal))} para ${user2Name}` : "✨ Tudo quite!"}
+                                        </div>
+                                        {(stats.u1Bal !== 0 || stats.u2Bal !== 0) && (
+                                            <button onClick={() => setShowMimoModal(true)} className="w-full mt-4 flex items-center justify-center gap-2 text-sm font-bold text-pink-600 bg-pink-50 p-3.5 rounded-2xl border border-pink-100 transition-all active:scale-95 shadow-sm">
+                                                <Gift className="w-4 h-4"/> Quitar com Mimo
+                                            </button>
+                                        )}
+                                    </div>
+
+                                    <div className="bg-white border border-pink-100 p-5 rounded-[2rem] shadow-sm">
+                                        <div className="flex justify-between items-center mb-4">
+                                            <h2 className="text-lg font-bold text-pink-600 flex items-center gap-2"><AlertCircle className="w-5 h-5" /> Alertas de Gastos</h2>
+                                            <button onClick={() => setIsAddBudgetModalOpen(true)} className="p-1.5 bg-pink-50 text-pink-500 rounded-full active:scale-90 transition-transform"><Plus className="w-4 h-4" /></button>
+                                        </div>
+                                        <div className="space-y-4">
+                                            {(budgets || []).length === 0 && <p className="text-xs text-slate-400 text-center py-2">Nenhum alerta criado.</p>}
+                                            {(budgets || []).map(b => {
+                                                const spent = categoryTotals[b.category] || 0;
+                                                const pct = Math.min(100, Math.round((spent / b.limit) * 100) || 0);
+                                                return (
+                                                    <div key={b.id} className="group">
+                                                        <div className="flex justify-between text-xs font-bold text-slate-700 mb-1">
+                                                            <span>{b.category} <button onClick={() => delDoc('budgets', b.id)} className="opacity-0 group-hover:opacity-100 text-rose-300 ml-1"><Trash2 className="w-3 h-3"/></button></span>
+                                                            <span>{format(spent)} / {format(b.limit)}</span>
+                                                        </div>
+                                                        <div className="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden">
+                                                            <div className={`h-full rounded-full transition-all duration-700 ${pct >= 100 ? 'bg-rose-500' : pct >= 80 ? 'bg-orange-400' : 'bg-emerald-400'}`} style={{ width: `${pct}%` }}></div>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+
+                                    {challenges.some(c => c.progress >= c.target) && (
+                                        <div className="bg-amber-50 border border-amber-200 p-5 rounded-[2rem] shadow-sm">
+                                            <h2 className="text-lg font-bold mb-4 text-amber-600 flex items-center gap-2"><Trophy className="w-5 h-5"/> Galeria de Troféus</h2>
+                                            <div className="flex gap-3 overflow-x-auto hide-scrollbar">
+                                                {challenges.filter(c => c.progress >= c.target).map(c => (
+                                                    <div key={c.id} className="min-w-[100px] bg-white p-3 rounded-2xl border border-amber-100 text-center shadow-sm shrink-0">
+                                                        <div className="w-12 h-12 bg-gradient-to-br from-amber-100 to-yellow-300 rounded-full flex items-center justify-center mx-auto mb-2 text-amber-600 shadow-inner">
+                                                            {c.icon === 'Flame' ? <Flame className="w-6 h-6"/> : <PiggyBank className="w-6 h-6"/>}
+                                                        </div>
+                                                        <p className="text-[10px] font-bold text-slate-600 truncate">{c.title}</p>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {activeTab === 'transactions' && (
+                                <div className="space-y-4">
+                                    <h2 className="text-xl font-bold text-pink-600 px-1">Diário de Gastos 📸</h2>
+                                    {(transactions || []).length === 0 && <p className="text-sm text-slate-400 text-center mt-10">Nenhum gasto registrado neste mês.</p>}
+                                    {(transactions || []).slice().sort((a,b) => new Date(b.date||0) - new Date(a.date||0)).map(t => (
+                                        <div key={t.id} className="bg-white p-4 rounded-3xl shadow-sm border border-pink-50 relative group">
+                                            <div className="flex justify-between items-center mb-2">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="w-10 h-10 rounded-full bg-pink-50 flex items-center justify-center shadow-inner">{getCategoryIcon(t.category)}</div>
+                                                    <div>
+                                                        <p className="font-bold text-slate-800 text-sm">{t.title}</p>
+                                                        <p className="text-[10px] text-slate-400 font-bold uppercase">{t.paidBy === 'user1' ? user1Name : user2Name} • {formatDateSafe(t.date)}</p>
+                                                    </div>
+                                                </div>
+                                                <p className="font-black text-slate-800">{format(t.amount)}</p>
+                                            </div>
+                                            {t.photo ? (
+                                                <div className="mt-2 w-full h-40 rounded-2xl overflow-hidden relative border border-pink-100 shadow-inner">
+                                                    <img src={t.photo} className="w-full h-full object-cover" alt="Recibo" />
+                                                    <button onClick={() => { setEditingTxIdForPhoto(t.id); editPhotoInputRef.current?.click(); }} className="absolute top-2 right-2 bg-black/50 text-white p-1.5 rounded-full backdrop-blur-md"><Pencil className="w-4 h-4"/></button>
+                                                </div>
+                                            ) : (
+                                                <button onClick={() => { setEditingTxIdForPhoto(t.id); editPhotoInputRef.current?.click(); }} className="text-[10px] font-bold text-pink-400 flex items-center gap-1 self-end bg-pink-50 px-3 py-1 rounded-full active:scale-95"><Camera className="w-3 h-3"/> + Adicionar Foto</button>
+                                            )}
+                                            <button onClick={() => delDoc('transactions', t.id)} className="absolute -top-1 -right-1 opacity-0 group-hover:opacity-100 bg-rose-500 text-white p-1.5 rounded-full shadow-lg transition-opacity"><Trash2 className="w-4 h-4"/></button>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+
+                            {activeTab === 'goals' && (
+                                <div className="space-y-8">
+                                    <div className="space-y-4">
+                                        <div className="flex justify-between items-center">
+                                            <h2 className="text-xl font-bold text-purple-600 flex items-center gap-2"><Flame className="w-5 h-5"/> Desafios do Casal</h2>
+                                            <button onClick={() => setIsAddChallengeModalOpen(true)} className="text-xs font-bold text-purple-500 bg-purple-50 px-4 py-2 rounded-full shadow-sm active:scale-95">+ Novo</button>
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-3">
+                                            {(challenges || []).length === 0 && <p className="text-xs text-slate-400 col-span-2">Crie desafios para economizar juntos!</p>}
+                                            {(challenges || []).map(c => {
+                                                const done = c.progress >= c.target;
+                                                return (
+                                                    <div key={c.id} className={`p-4 rounded-3xl border shadow-sm relative group transition-all ${done ? 'bg-purple-50 border-purple-200' : 'bg-white border-pink-50'}`}>
+                                                        {done && <div className="absolute -top-2 -right-2 bg-yellow-400 text-white rounded-full p-1 shadow-sm"><CheckCircle2 className="w-4 h-4"/></div>}
+                                                        <div className="flex items-center gap-2 mb-3 text-purple-600">
+                                                            {c.icon === 'Flame' ? <Flame className="w-4 h-4"/> : <PiggyBank className="w-4 h-4"/>}
+                                                            <span className="font-bold text-xs text-slate-700 truncate">{c.title}</span>
+                                                        </div>
+                                                        <div className="flex justify-between items-center">
+                                                            <span className="text-lg font-black text-purple-500">{c.progress || 0}<span className="text-[10px] text-slate-400">/{c.target || 1}</span></span>
+                                                            {!done && <button onClick={() => updDoc('challenges', c.id, { progress: (c.progress || 0) + 1 })} className="w-8 h-8 bg-purple-100 text-purple-600 rounded-full font-black shadow-inner active:scale-75 transition-transform">+</button>}
+                                                        </div>
+                                                        <button onClick={() => delDoc('challenges', c.id)} className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 text-rose-300 p-1"><Trash2 className="w-3.5 h-3.5"/></button>
+                                                    </div>
+                                                )
+                                            })}
+                                        </div>
+                                    </div>
+
+                                    <div className="bg-sky-50 p-5 rounded-[2rem] border border-sky-100 shadow-inner">
+                                        <h2 className="text-lg font-bold text-sky-600 flex items-center gap-2 mb-4"><ListTodo className="w-5 h-5" /> Wishlist 🛒</h2>
+                                        <div className="space-y-3 mb-4">
+                                            {(wishlist || []).map(w => (
+                                                <div key={w.id} className="bg-white p-3 rounded-2xl flex items-center justify-between shadow-sm group border border-sky-50 transition-all hover:border-sky-200">
+                                                    <div className="flex items-center gap-3 flex-1">
+                                                        <button onClick={() => updDoc('wishlist', w.id, { done: !w.done })} className="shrink-0">{w.done ? <CheckCircle2 className="text-emerald-500 w-5 h-5"/> : <Circle className="text-sky-200 w-5 h-5"/>}</button>
+                                                        <div>
+                                                            <p className={`text-sm font-bold leading-tight ${w.done ? 'line-through text-slate-400' : 'text-slate-700'}`}>{w.title}</p>
+                                                            <p className="text-[9px] font-black text-sky-400 uppercase tracking-tighter mt-0.5">De: {w.addedBy === 'user1' ? user1Name : user2Name}</p>
+                                                        </div>
+                                                    </div>
+                                                    <button onClick={() => delDoc('wishlist', w.id)} className="opacity-0 group-hover:opacity-100 text-rose-200 p-1.5 transition-opacity"><Trash2 className="w-4 h-4"/></button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                        <form onSubmit={(e) => { e.preventDefault(); if(!wishlistInput.trim()) return; saveDoc('wishlist', { title: wishlistInput, done: false, addedBy: wishlistWho }); setWishlistInput(''); }} className="flex flex-col gap-2 bg-white p-3 rounded-3xl shadow-md border border-sky-100">
+                                            <div className="flex gap-2 mb-1 p-1 bg-slate-50 rounded-full">
+                                                <button type="button" onClick={()=>setWishlistWho('user1')} className={`flex-1 py-1 rounded-full text-[10px] font-black uppercase transition-all ${wishlistWho==='user1'?'bg-pink-500 text-white shadow-md':'text-slate-400'}`}>{user1Name}</button>
+                                                <button type="button" onClick={()=>setWishlistWho('user2')} className={`flex-1 py-1 rounded-full text-[10px] font-black uppercase transition-all ${wishlistWho==='user2'?'bg-sky-500 text-white shadow-md':'text-slate-400'}`}>{user2Name}</button>
+                                            </div>
+                                            <div className="flex gap-2 px-1">
+                                                <input value={wishlistInput} onChange={e=>setWishlistInput(e.target.value)} placeholder="Novo desejo..." className="flex-1 bg-transparent px-2 font-bold text-sm outline-none placeholder-slate-300" />
+                                                <button className="w-10 h-10 bg-sky-500 text-white rounded-full font-black shadow-lg active:scale-90 transition-transform">+</button>
+                                            </div>
+                                        </form>
+                                    </div>
+                                </div>
+                            )}
+
+                            {activeTab === 'dates' && (
+                                <div className="space-y-6">
+                                    <div className="bg-gradient-to-br from-pink-500 to-rose-400 p-8 rounded-[2.5rem] shadow-xl text-white text-center border-b-4 border-pink-300 relative overflow-hidden">
+                                        <p className="text-[10px] font-black uppercase tracking-widest mb-2 opacity-80 flex items-center justify-center gap-1"><Clock className="w-3 h-3"/> Nossa História</p>
+                                        <h2 className="text-4xl font-black mb-1 tracking-tighter">Vivendo o Amor</h2>
+                                        <p className="text-sm font-bold opacity-90 mt-2 bg-white/20 inline-block px-4 py-1.5 rounded-full border border-white/30 backdrop-blur-sm">Desde {formatDateSafe(settings?.startDate ? `${settings.startDate}T00:00:00` : new Date())}</p>
+                                    </div>
+                                    <div className="flex justify-between items-center px-1">
+                                        <h2 className="text-xl font-bold text-pink-600 flex items-center gap-2"><CalendarHeart className="w-5 h-5"/> Datas Especiais</h2>
+                                        <button onClick={() => setIsAddDateModalOpen(true)} className="text-sm font-bold text-pink-500 bg-pink-50 px-4 py-2 rounded-full shadow-sm active:scale-95">+ Adicionar</button>
+                                    </div>
+                                    <div className="space-y-3">
+                                        {(dates || []).length === 0 && <p className="text-sm text-slate-400 text-center py-4">Nenhuma data cadastrada.</p>}
+                                        {(dates || []).map(item => (
+                                            <div key={item.id} className="bg-white p-4 rounded-[1.5rem] shadow-sm border border-pink-50 flex items-center justify-between group relative">
+                                                <div className="flex items-center gap-4">
+                                                    <div className={`w-14 h-14 rounded-2xl flex items-center justify-center ${item.days === 0 ? 'bg-rose-500 text-white animate-pulse' : 'bg-pink-50 text-pink-400'} shadow-inner`}><CalendarDays className="w-7 h-7" /></div>
+                                                    <div><p className="font-bold text-slate-800 text-base">{item.title}</p><p className="text-[11px] text-slate-400 font-black uppercase">{formatDateSafe(item.next)}</p></div>
+                                                </div>
+                                                <div className="text-right flex items-center gap-3">
+                                                    {item.days === 0 ? <span className="text-sm font-black text-rose-500">🎉 É Hoje!</span> : <div className="text-pink-500 font-black text-2xl leading-none">{item.days}<span className="text-[9px] block text-slate-300 font-black uppercase text-center mt-1">Dias</span></div>}
+                                                    <button onClick={() => delDoc('specialDates', item.id)} className="opacity-0 group-hover:opacity-100 text-rose-200 transition-opacity p-2"><Trash2 className="w-4 h-4"/></button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {activeTab === 'subscriptions' && (
+                                <div className="space-y-6">
+                                    <div className="flex justify-between items-center px-1">
+                                        <h2 className="text-xl font-bold text-pink-600 flex items-center gap-2"><Repeat className="w-5 h-5"/> Despesas Fixas</h2>
+                                        <button onClick={() => setIsAddSubModalOpen(true)} className="text-sm font-bold text-pink-500 bg-pink-50 px-4 py-2 rounded-full shadow-sm active:scale-95">+ Novo</button>
+                                    </div>
+                                    <div className="bg-white rounded-[2.5rem] overflow-hidden border border-pink-50 shadow-lg">
+                                        {(subscriptions || []).length === 0 && <p className="text-sm text-slate-400 text-center py-8">Nenhuma despesa fixa registrada.</p>}
+                                        {(subscriptions || []).map(s => (
+                                            <div key={s.id} className="p-5 border-b border-pink-50 flex justify-between items-center group hover:bg-pink-50/30 transition-colors">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="w-10 h-10 bg-purple-50 rounded-full flex items-center justify-center text-purple-400 shrink-0 shadow-inner"><CreditCard className="w-5 h-5"/></div>
+                                                    <div>
+                                                        <p className="font-bold text-slate-800 text-sm truncate max-w-[150px]">{s.name}</p>
+                                                        <p className="text-[10px] text-slate-400 font-black uppercase">{s.paidBy === 'user1' ? user1Name : user2Name} • {s.split === 'shared' ? 'Casal' : 'Indiv.'}</p>
+                                                    </div>
+                                                </div>
+                                                <div className="flex items-center gap-3">
+                                                    <p className="font-black text-slate-800 text-base">{format(s.amount)}</p>
+                                                    <button onClick={() => delDoc('subscriptions', s.id)} className="opacity-0 group-hover:opacity-100 text-rose-200 p-2 transition-opacity"><Trash2 className="w-4 h-4"/></button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                        {subscriptions.length > 0 && (
+                                            <div className="bg-pink-50/50 p-6 flex justify-between items-center border-t border-pink-100">
+                                                <span className="font-bold text-pink-600">Total Mensal</span>
+                                                <span className="text-xl font-black text-pink-600">{format(subscriptions.reduce((acc, s) => acc + (parseFloat(s.amount)||0), 0))}</span>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+                        </main>
+
+                        <nav className="shrink-0 bg-white/95 backdrop-blur-lg border-t border-pink-100 flex justify-around p-2 pb-10 pt-3 z-30 shadow-[0_-10px_30px_rgba(0,0,0,0.03)] sm:pb-4">
+                            {[
+                                { id: 'dashboard', icon: Home, label: 'Resumo' },
+                                { id: 'transactions', icon: ReceiptText, label: 'Gastos' },
+                                { id: 'goals', icon: Target, label: 'Sonhos' },
+                                { id: 'subscriptions', icon: Repeat, label: 'Fixas' },
+                                { id: 'dates', icon: CalendarHeart, label: 'Datas' }
+                            ].map(tab => (
+                                <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`flex flex-1 flex-col items-center gap-1 transition-all duration-300 ${activeTab === tab.id ? 'text-pink-500 scale-110' : 'text-slate-300'}`}>
+                                    <tab.icon className={`w-6 h-6 ${activeTab === tab.id ? 'fill-pink-500/10' : ''}`} />
+                                    <span className="text-[9px] font-black uppercase tracking-tighter">{tab.label}</span>
+                                </button>
+                            ))}
+                        </nav>
+
+                        {['dashboard', 'transactions'].includes(activeTab) && (
+                            <button onClick={() => { setTransactionPhoto(null); setIsAddModalOpen(true); }} className="absolute bottom-28 right-6 w-16 h-16 bg-gradient-to-br from-pink-500 to-rose-400 text-white rounded-full shadow-[0_15px_40px_-10px_rgba(236,72,153,0.5)] flex items-center justify-center active:scale-75 transition-all z-20 border-4 border-white sm:bottom-24"><Plus className="w-8 h-8" /></button>
+                        )}
+
+                        {isSettingsModalOpen && (
+                            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-end justify-center z-50">
+                                <div className="bg-white w-full max-w-md rounded-t-[3rem] p-6 pb-12 shadow-2xl">
+                                    <div className="w-12 h-1.5 bg-slate-200 rounded-full mx-auto mb-6"></div>
+                                    <div className="flex justify-between items-center mb-6">
+                                        <h3 className="text-2xl font-black text-pink-600 tracking-tighter">Configurações ⚙️</h3>
+                                        <button onClick={() => setIsSettingsModalOpen(false)} className="p-2 bg-slate-100 rounded-full text-slate-400"><X className="w-5 h-5"/></button>
+                                    </div>
+                                    <form onSubmit={handleSaveSettings} className="space-y-4">
+                                        <div className="bg-slate-50 p-4 rounded-3xl"><label className="text-[10px] font-black text-slate-400 block uppercase mb-1">Pessoa 1</label><input required name="user1Name" defaultValue={user1Name} className="w-full bg-transparent font-bold text-slate-800 outline-none" /></div>
+                                        <div className="bg-slate-50 p-4 rounded-3xl"><label className="text-[10px] font-black text-slate-400 block uppercase mb-1">Pessoa 2</label><input required name="user2Name" defaultValue={user2Name} className="w-full bg-transparent font-bold text-slate-800 outline-none" /></div>
+                                        <div className="bg-slate-50 p-4 rounded-3xl"><label className="text-[10px] font-black text-slate-400 block uppercase mb-1">Data de Início</label><input required name="startDate" type="date" defaultValue={settings.startDate} className="w-full bg-transparent font-bold text-slate-800 outline-none" /></div>
+                                        <button className="w-full bg-gradient-to-r from-pink-500 to-rose-500 text-white font-black py-5 rounded-3xl shadow-xl">Salvar Configurações</button>
+                                    </form>
+                                </div>
+                            </div>
+                        )}
+
+                        {isAddModalOpen && (
+                            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-end justify-center z-50">
+                                <div className="bg-white w-full max-w-md rounded-t-[3rem] p-6 pb-12 max-h-[95dvh] overflow-y-auto hide-scrollbar shadow-2xl">
+                                    <div className="w-12 h-1.5 bg-slate-200 rounded-full mx-auto mb-6"></div>
+                                    <div className="flex justify-between items-center mb-6"><h3 className="text-2xl font-black text-pink-600 tracking-tighter">Novo Registro 🌸</h3><button onClick={() => setIsAddModalOpen(false)} className="p-2 bg-slate-100 rounded-full text-slate-400"><X className="w-5 h-5"/></button></div>
+                                    <form onSubmit={handleSaveTransaction} className="space-y-4">
+                                        <div className="bg-slate-50 p-4 rounded-3xl"><label className="text-[10px] font-black text-slate-400 block uppercase mb-1">Descrição</label><input required name="title" className="w-full bg-transparent font-bold outline-none" placeholder="Ex: Jantar fofo..." /></div>
+                                        <div className="bg-pink-50 p-4 rounded-3xl flex items-center justify-between cursor-pointer border-2 border-dashed border-pink-200" onClick={() => receiptInputRef.current?.click()}>
+                                            <span className="text-pink-500 font-black text-xs flex items-center gap-2 uppercase"><ImagePlus className="w-5 h-5"/> {transactionPhoto ? 'Trocar Foto' : 'Guardar Lembrança'}</span>
+                                            {transactionPhoto && <img src={transactionPhoto} className="w-10 h-10 rounded-xl object-cover shadow-md border-2 border-white"/>}
+                                            <input type="file" ref={receiptInputRef} onChange={(e) => handlePhotoUpload(e, 'newTransaction')} className="hidden" accept="image/*" />
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div className="bg-slate-50 p-4 rounded-3xl"><label className="text-[10px] font-black text-slate-400 block uppercase mb-1">Valor</label><input required name="amount" type="number" step="0.01" className="w-full bg-transparent font-black outline-none" placeholder="0.00" /></div>
+                                            <div className="bg-slate-50 p-4 rounded-3xl"><label className="text-[10px] font-black text-slate-400 block uppercase mb-1">Data</label><input required name="date" type="date" defaultValue={new Date().toISOString().split('T')[0]} className="w-full bg-transparent font-bold outline-none" /></div>
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div className="bg-slate-50 p-4 rounded-3xl"><label className="text-[10px] font-black text-slate-400 mb-1 uppercase">Forma</label><select name="cardId" className="w-full bg-transparent font-bold outline-none">{cards.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
+                                            <div className="bg-slate-50 p-4 rounded-3xl"><label className="text-[10px] font-black text-slate-400 mb-1 uppercase">Categoria</label><select name="category" className="w-full bg-transparent font-bold outline-none"><option>Alimentação</option><option>Contas</option><option>Transporte</option><option>Viagem</option><option>Lazer</option></select></div>
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-4 pb-4">
+                                            <div className="bg-slate-50 p-4 rounded-3xl"><label className="text-[10px] font-black text-slate-400 mb-1 uppercase">Quem Pagou?</label><select name="paidBy" className="w-full bg-transparent font-bold outline-none"><option value="user1">{user1Name}</option><option value="user2">{user2Name}</option></select></div>
+                                            <div className="bg-slate-50 p-4 rounded-3xl"><label className="text-[10px] font-black text-slate-400 mb-1 uppercase">Divisão</label><select name="split" className="w-full bg-transparent font-bold outline-none"><option value="shared">Casal (50/50)</option><option value="individual">Apenas Meu</option></select></div>
+                                        </div>
+                                        <button className="w-full bg-gradient-to-r from-pink-500 to-rose-500 text-white font-black py-5 rounded-3xl shadow-xl">Salvar no Bolso <Sparkles className="w-5 h-5"/></button>
+                                    </form>
+                                </div>
+                            </div>
+                        )}
+
+                        {isAddBudgetModalOpen && (
+                            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-end justify-center z-50">
+                                <div className="bg-white w-full max-w-md rounded-t-[3rem] p-6 pb-12 shadow-2xl">
+                                    <div className="w-12 h-1.5 bg-slate-200 rounded-full mx-auto mb-6"></div>
+                                    <h3 className="text-xl font-black text-pink-600 mb-6 flex items-center gap-2"><AlertCircle className="w-6 h-6"/> Novo Alerta</h3>
+                                    <form onSubmit={async e => { e.preventDefault(); const fd = new FormData(e.target); await saveDoc('budgets', { category: fd.get('category'), limit: parseFloat(fd.get('limit'))||0 }); setIsAddBudgetModalOpen(false); }} className="space-y-4">
+                                        <div className="bg-slate-50 p-4 rounded-2xl"><label className="text-[10px] font-black text-slate-400 block mb-1 uppercase">Categoria</label><select name="category" className="w-full bg-transparent font-bold outline-none"><option>Alimentação</option><option>Lazer</option><option>Transporte</option><option>Viagem</option></select></div>
+                                        <div className="bg-slate-50 p-4 rounded-2xl"><label className="text-[10px] font-black text-slate-400 block mb-1 uppercase">Limite Máximo (R$)</label><input name="limit" type="number" step="0.01" required placeholder="Ex: 300" className="w-full bg-transparent font-black outline-none" /></div>
+                                        <button className="w-full bg-pink-500 text-white font-black py-4 rounded-3xl shadow-lg mt-4">Ativar Alerta 🚨</button>
+                                        <button type="button" onClick={()=>setIsAddBudgetModalOpen(false)} className="w-full text-slate-400 font-bold py-2">Cancelar</button>
+                                    </form>
+                                </div>
+                            </div>
+                        )}
+
+                        {isAddChallengeModalOpen && (
+                            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-end justify-center z-50">
+                                <div className="bg-white w-full max-w-md rounded-t-[3rem] p-6 pb-12 shadow-2xl">
+                                    <div className="w-12 h-1.5 bg-slate-200 rounded-full mx-auto mb-6"></div>
+                                    <h3 className="text-xl font-black text-purple-600 mb-6 flex items-center gap-2"><Trophy className="w-6 h-6"/> Novo Desafio</h3>
+                                    <form onSubmit={async e => { e.preventDefault(); const fd = new FormData(e.target); await saveDoc('challenges', { title: fd.get('title'), target: parseInt(fd.get('target'))||1, progress: 0, icon: selectedChallengeIcon }); setIsAddChallengeModalOpen(false); }} className="space-y-4">
+                                        <div className="bg-slate-50 p-4 rounded-2xl"><label className="text-[10px] font-black text-slate-400 block mb-1 uppercase">O que faremos?</label><input name="title" required placeholder="Ex: Sem IFood 🍕" className="w-full bg-transparent font-bold outline-none" /></div>
+                                        <div className="bg-slate-50 p-4 rounded-2xl"><label className="text-[10px] font-black text-slate-400 block mb-1 uppercase">Quantas vezes/dias?</label><input name="target" type="number" required placeholder="Alvo (ex: 7)" className="w-full bg-transparent font-black outline-none" /></div>
+                                        <div className="flex gap-4">
+                                            <button type="button" onClick={() => setSelectedChallengeIcon('Flame')} className={`flex-1 p-4 rounded-2xl border-2 transition-all shadow-sm ${selectedChallengeIcon==='Flame'?'bg-purple-500 border-purple-500 text-white':'bg-slate-50 border-transparent text-slate-400'}`}><Flame className="mx-auto"/></button>
+                                            <button type="button" onClick={() => setSelectedChallengeIcon('PiggyBank')} className={`flex-1 p-4 rounded-2xl border-2 transition-all shadow-sm ${selectedChallengeIcon==='PiggyBank'?'bg-purple-500 border-purple-500 text-white':'bg-slate-50 border-transparent text-slate-400'}`}><PiggyBank className="mx-auto"/></button>
+                                        </div>
+                                        <button className="w-full bg-purple-500 text-white font-black py-4 rounded-3xl shadow-lg mt-4">Lançar Desafio 🚀</button>
+                                        <button type="button" onClick={()=>setIsAddChallengeModalOpen(false)} className="w-full text-slate-400 font-bold py-2">Desistir</button>
+                                    </form>
+                                </div>
+                            </div>
+                        )}
+
+                        {isAddSubModalOpen && (
+                            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-end justify-center z-50">
+                                <div className="bg-white w-full max-w-md rounded-t-[3rem] p-6 pb-12 shadow-2xl">
+                                    <div className="w-12 h-1.5 bg-slate-200 rounded-full mx-auto mb-6"></div>
+                                    <h3 className="text-xl font-black text-pink-600 mb-6 flex items-center gap-2"><Repeat className="w-5 h-5"/> Nova Despesa Fixa</h3>
+                                    <form onSubmit={async e => { e.preventDefault(); const fd = new FormData(e.target); await saveDoc('subscriptions', { name: fd.get('name'), amount: parseFloat(fd.get('amount'))||0, paidBy: fd.get('paidBy'), split: fd.get('split') }); setIsAddSubModalOpen(false); }} className="space-y-4">
+                                        <div className="bg-slate-50 p-4 rounded-2xl"><label className="text-[10px] font-black text-slate-400 block mb-1 uppercase">Nome</label><input name="name" required placeholder="Netflix, Aluguel..." className="w-full bg-transparent font-bold outline-none" /></div>
+                                        <div className="bg-slate-50 p-4 rounded-2xl"><label className="text-[10px] font-black text-slate-400 block mb-1 uppercase">Valor Mensal</label><input name="amount" type="number" step="0.01" required placeholder="0.00" className="w-full bg-transparent font-black outline-none" /></div>
+                                        <div className="grid grid-cols-2 gap-4 pb-4">
+                                            <div className="bg-slate-50 p-4 rounded-2xl"><label className="text-[10px] font-black text-slate-400 block mb-1 uppercase">Quem?</label><select name="paidBy" className="w-full bg-transparent font-bold outline-none"><option value="user1">{user1Name}</option><option value="user2">{user2Name}</option></select></div>
+                                            <div className="bg-slate-50 p-4 rounded-2xl"><label className="text-[10px] font-black text-slate-400 block mb-1 uppercase">Divisão</label><select name="split" className="w-full bg-transparent font-bold outline-none"><option value="shared">Casal</option><option value="individual">Individual</option></select></div>
+                                        </div>
+                                        <button className="w-full bg-pink-500 text-white font-black py-4 rounded-3xl shadow-lg">Guardar Fixa 🎀</button>
+                                        <button type="button" onClick={()=>setIsAddSubModalOpen(false)} className="w-full text-slate-400 font-bold py-2">Cancelar</button>
+                                    </form>
+                                </div>
+                            </div>
+                        )}
+
+                        {isAddDateModalOpen && (
+                            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-end justify-center z-50">
+                                <div className="bg-white w-full max-w-md rounded-t-[3rem] p-6 pb-12 shadow-2xl">
+                                    <div className="w-12 h-1.5 bg-slate-200 rounded-full mx-auto mb-6"></div>
+                                    <h3 className="text-xl font-black text-pink-600 mb-6 flex items-center gap-2"><CalendarDays className="w-6 h-6"/> Momento Inesquecível</h3>
+                                    <form onSubmit={async e => { e.preventDefault(); const fd = new FormData(e.target); await saveDoc('specialDates', { title: fd.get('title'), date: fd.get('date'), isYearly: dateFormIsYearly }); setIsAddDateModalOpen(false); }} className="space-y-4">
+                                        <div className="bg-slate-50 p-4 rounded-2xl"><label className="text-[10px] font-black text-slate-400 block mb-1 uppercase">O que comemoramos?</label><input name="title" required placeholder="Ex: Nosso Aniversário" className="w-full bg-transparent font-bold outline-none" /></div>
+                                        <div className="bg-slate-50 p-4 rounded-2xl"><label className="text-[10px] font-black text-slate-400 block mb-1 uppercase">Qual a Data?</label><input name="date" type="date" required className="w-full bg-transparent font-bold outline-none" /></div>
+                                        <div className="flex gap-2">
+                                            <button type="button" onClick={()=>setDateFormIsYearly(true)} className={`flex-1 py-4 rounded-2xl font-black transition-all shadow-sm ${dateFormIsYearly?'bg-pink-500 text-white':'bg-slate-50 text-slate-400'}`}>Todo Ano ✨</button>
+                                            <button type="button" onClick={()=>setDateFormIsYearly(false)} className={`flex-1 py-4 rounded-2xl font-black transition-all shadow-sm ${!dateFormIsYearly?'bg-pink-500 text-white':'bg-slate-50 text-slate-400'}`}>Uma Vez 💖</button>
+                                        </div>
+                                        <button className="w-full bg-pink-600 text-white font-black py-4 rounded-3xl shadow-lg mt-4">Eternizar Data</button>
+                                        <button type="button" onClick={()=>setIsAddDateModalOpen(false)} className="w-full text-slate-400 font-bold py-2">Cancelar</button>
+                                    </form>
+                                </div>
+                            </div>
+                        )}
+
+                        {showMimoModal && (
+                            <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                                <div className="bg-white w-full max-w-sm rounded-[2.5rem] p-6 text-center shadow-2xl border-4 border-pink-100">
+                                    <Gift className="w-12 h-12 text-pink-500 mx-auto mb-4" />
+                                    <h3 className="text-xl font-black text-pink-600 mb-2 tracking-tighter">Pagar com Mimo 🎁</h3>
+                                    <form onSubmit={handlePayWithMimoSubmit} className="space-y-4 text-left">
+                                        <div className="bg-slate-50 p-4 rounded-2xl"><label className="text-[10px] font-black text-slate-400 uppercase block mb-1">Qual o Mimo?</label><input required name="title" value={mimoTitle} onChange={e=>setMimoTitle(e.target.value)} placeholder="Ex: Pizza dos sonhos..." className="w-full bg-transparent font-bold outline-none" /></div>
+                                        <div className="bg-slate-50 p-4 rounded-2xl"><label className="text-[10px] font-black text-slate-400 uppercase block mb-1">Valor Estimado</label><input required name="amount" type="number" step="0.01" placeholder="0.00" className="w-full bg-transparent font-black outline-none" /></div>
+                                        <button className="w-full bg-pink-500 text-white font-black py-4 rounded-3xl shadow-lg">Quitar Dívida com Amor 💖</button>
+                                        <button type="button" onClick={()=>setShowMimoModal(false)} className="w-full text-slate-400 font-bold py-2 text-sm">Talvez depois</button>
+                                    </form>
+                                </div>
+                            </div>
+                        )}
+
+                    </div>
+                </div>
+            );
+        }
+
+        // Renderizando o App na div root
+        const root = createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
