@@ -3,6 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    
+    <!-- TAGS PARA O APP FUNCIONAR EM ECRÃ INTEIRO (PWA) -->
+    <meta name="theme-color" content="#fbcfe8">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Nosso Bolso">
+    
     <title>Nosso Bolso 🌸</title>
     
     <!-- Tailwind CSS (Estilos) -->
@@ -14,6 +22,8 @@
     <style>
         .hide-scrollbar::-webkit-scrollbar { display: none; }
         .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        /* Impede seleções de texto acidentais parecendo mais um app nativo */
+        body { -webkit-tap-highlight-color: transparent; }
     </style>
 </head>
 <body class="bg-pink-50">
