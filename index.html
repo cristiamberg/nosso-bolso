@@ -17,7 +17,16 @@
     </style>
 </head>
 <body class="bg-pink-50">
-    <div id="root"></div>
+    <div id="root">
+        <!-- Tela de Carregamento Rápida -->
+        <div style="display:flex; height:100vh; align-items:center; justify-content:center; flex-direction:column; gap:12px; color:#ec4899;">
+            <svg class="animate-spin h-10 w-10" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            <p style="font-weight:bold; font-family:sans-serif;">A ligar o Nosso Bolso...</p>
+        </div>
+    </div>
 
     <!-- Detector de Erros -->
     <script>
@@ -26,7 +35,7 @@
                 '<div style="padding:20px; color:#e11d48; text-align:center; font-family:sans-serif; height:100vh; display:flex; flex-direction:column; justify-content:center;">' +
                 '<h2 style="font-size:20px; font-weight:bold; margin-bottom:8px;">Ops! Ocorreu um problema.</h2>' +
                 '<p>' + message + '</p>' +
-                '<p style="font-size:12px; color:#888; margin-top:12px;">Se isso persistir, recarregue a página.</p></div>';
+                '<p style="font-size:12px; color:#888; margin-top:12px;">Se isto persistir, recarregue a página.</p></div>';
         };
     </script>
 
@@ -35,6 +44,11 @@
         import React, { useState, useMemo, useRef, useEffect } from 'https://esm.sh/react@18.2.0';
         import { createRoot } from 'https://esm.sh/react-dom@18.2.0/client';
         
+        // Importando Firebase diretamente dos servidores oficiais da Google (Mais rápido e sem tela branca)
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js';
+        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js';
+        import { getFirestore, collection, doc, setDoc, addDoc, updateDoc, deleteDoc, onSnapshot, serverTimestamp } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js';
+
         // Importando Ícones
         import { 
             Home, ReceiptText, Target, Plus, Plane, CreditCard, 
@@ -44,6 +58,21 @@
             Trash2, Pencil, AlertCircle, ImagePlus, Flame, PiggyBank, 
             CheckCircle2, Circle, ListTodo, Trophy, Settings
         } from 'https://esm.sh/lucide-react@0.344.0?bundle';
+
+        // --- CONFIGURAÇÃO DO FIREBASE ---
+        const firebaseConfig = {
+            apiKey: "AIzaSyDyWO6W5AEscA061bwG91u68TfX2FVycek",
+            authDomain: "nosso-bolso-d88a0.firebaseapp.com",
+            projectId: "nosso-bolso-d88a0",
+            storageBucket: "nosso-bolso-d88a0.firebasestorage.app",
+            messagingSenderId: "101766584028",
+            appId: "1:101766584028:web:f97ced5cc5a84170e98619"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        const appDatabaseId = "nosso-bolso-v2";
 
         // --- COMPRESSÃO DE IMAGEM ---
         const compressImage = (file, maxWidth = 800) => {
@@ -66,23 +95,15 @@
             });
         };
 
-        // --- BANCO DE DADOS LOCAL ---
-        const loadLocal = (key, defaultVal) => {
-            try {
-                const item = localStorage.getItem(`nossobolso_${key}`);
-                return item ? JSON.parse(item) : defaultVal;
-            } catch (e) {
-                return defaultVal;
-            }
-        };
-
-        // --- UTILITÁRIO PARA MOEDA BRASILEIRA (Aceita vírgula e ponto) ---
+        // --- UTILITÁRIO PARA MOEDA (Aceita vírgula e ponto) ---
         const parseCurrency = (val) => {
             if (!val) return 0;
             return parseFloat(String(val).replace(',', '.')) || 0;
         };
 
         function App() {
+            const [user, setUser] = useState(null);
+            const [authError, setAuthError] = useState(null);
             const [activeTab, setActiveTab] = useState('dashboard');
             
             // Modais
@@ -95,29 +116,19 @@
             const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
 
             // Dados Sincronizados
-            const [transactions, setTransactions] = useState(() => loadLocal('transactions', []));
-            const [goals, setGoals] = useState(() => loadLocal('goals', []));
-            const [subscriptions, setSubscriptions] = useState(() => loadLocal('subscriptions', []));
-            const [specialDates, setSpecialDates] = useState(() => loadLocal('specialDates', []));
-            const [challenges, setChallenges] = useState(() => loadLocal('challenges', []));
-            const [wishlist, setWishlist] = useState(() => loadLocal('wishlist', []));
-            const [budgets, setBudgets] = useState(() => loadLocal('budgets', []));
-            const [settings, setSettings] = useState(() => loadLocal('settings', { 
+            const [transactions, setTransactions] = useState([]);
+            const [goals, setGoals] = useState([]);
+            const [subscriptions, setSubscriptions] = useState([]);
+            const [specialDates, setSpecialDates] = useState([]);
+            const [challenges, setChallenges] = useState([]);
+            const [wishlist, setWishlist] = useState([]);
+            const [budgets, setBudgets] = useState([]);
+            const [settings, setSettings] = useState({ 
                 user1Name: 'Samile', 
                 user2Name: 'Cristiamberg', 
                 couplePhoto: null, 
                 startDate: '2023-06-12' 
-            }));
-
-            // Salvando automático
-            useEffect(() => localStorage.setItem('nossobolso_transactions', JSON.stringify(transactions)), [transactions]);
-            useEffect(() => localStorage.setItem('nossobolso_goals', JSON.stringify(goals)), [goals]);
-            useEffect(() => localStorage.setItem('nossobolso_subscriptions', JSON.stringify(subscriptions)), [subscriptions]);
-            useEffect(() => localStorage.setItem('nossobolso_specialDates', JSON.stringify(specialDates)), [specialDates]);
-            useEffect(() => localStorage.setItem('nossobolso_challenges', JSON.stringify(challenges)), [challenges]);
-            useEffect(() => localStorage.setItem('nossobolso_wishlist', JSON.stringify(wishlist)), [wishlist]);
-            useEffect(() => localStorage.setItem('nossobolso_budgets', JSON.stringify(budgets)), [budgets]);
-            useEffect(() => localStorage.setItem('nossobolso_settings', JSON.stringify(settings)), [settings]);
+            });
 
             // Formulários
             const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
@@ -144,30 +155,80 @@
                 { id: 'pix', name: 'Pix / Dinheiro', color: 'bg-emerald-400' },
             ];
 
+            // 1. Autenticação Segura
+            useEffect(() => {
+                const initAuth = async () => {
+                    try {
+                        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                            await signInWithCustomToken(auth, __initial_auth_token);
+                        } else {
+                            await signInAnonymously(auth);
+                        }
+                    } catch (err) {
+                        console.error("Erro na Autenticação:", err);
+                        setAuthError("Erro de comunicação com a base de dados. O Login Anónimo está ativado?");
+                    }
+                };
+                initAuth();
+                const unsubscribe = onAuthStateChanged(auth, setUser);
+                return () => unsubscribe();
+            }, []);
+
+            // 2. Sincronização de Dados com o Firestore (Em tempo real para os dois)
+            useEffect(() => {
+                if (!user) return; 
+                
+                const collections = [
+                    { name: 'transactions', setter: setTransactions },
+                    { name: 'goals', setter: setGoals },
+                    { name: 'subscriptions', setter: setSubscriptions },
+                    { name: 'specialDates', setter: setSpecialDates },
+                    { name: 'challenges', setter: setChallenges },
+                    { name: 'wishlist', setter: setWishlist },
+                    { name: 'budgets', setter: setBudgets }
+                ];
+
+                const unsubs = collections.map(col => {
+                    const q = collection(db, 'artifacts', appDatabaseId, 'public', 'data', col.name);
+                    return onSnapshot(q, 
+                        (snap) => {
+                            const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+                            col.setter(data);
+                        }, 
+                        (err) => console.error(`Erro ao carregar ${col.name}:`, err)
+                    );
+                });
+
+                const unsubSet = onSnapshot(doc(db, 'artifacts', appDatabaseId, 'public', 'data', 'settings', 'profile'), 
+                    (snap) => {
+                        if (snap.exists()) setSettings(prev => ({ ...prev, ...snap.data() }));
+                    }, 
+                    (err) => console.error("Erro configurações:", err)
+                );
+
+                return () => { 
+                    unsubs.forEach(u => u()); 
+                    unsubSet(); 
+                };
+            }, [user]);
+
+            // --- FUNÇÕES DE SALVAMENTO NO FIREBASE ---
             const saveDoc = async (colName, data) => {
-                const newItem = { id: Date.now().toString() + Math.random(), ...data, createdAt: Date.now() };
-                if(colName === 'transactions') setTransactions(prev => [...prev, newItem]);
-                if(colName === 'subscriptions') setSubscriptions(prev => [...prev, newItem]);
-                if(colName === 'specialDates') setSpecialDates(prev => [...prev, newItem]);
-                if(colName === 'challenges') setChallenges(prev => [...prev, newItem]);
-                if(colName === 'wishlist') setWishlist(prev => [...prev, newItem]);
-                if(colName === 'budgets') setBudgets(prev => [...prev, newItem]);
+                try {
+                    await addDoc(collection(db, 'artifacts', appDatabaseId, 'public', 'data', colName), { 
+                        ...data, createdAt: serverTimestamp() 
+                    });
+                } catch (err) { console.error(`Erro ao salvar em ${colName}:`, err); }
             };
 
             const delDoc = async (colName, id) => {
-                if(colName === 'transactions') setTransactions(prev => prev.filter(i => i.id !== id));
-                if(colName === 'subscriptions') setSubscriptions(prev => prev.filter(i => i.id !== id));
-                if(colName === 'specialDates') setSpecialDates(prev => prev.filter(i => i.id !== id));
-                if(colName === 'challenges') setChallenges(prev => prev.filter(i => i.id !== id));
-                if(colName === 'wishlist') setWishlist(prev => prev.filter(i => i.id !== id));
-                if(colName === 'budgets') setBudgets(prev => prev.filter(i => i.id !== id));
+                try { await deleteDoc(doc(db, 'artifacts', appDatabaseId, 'public', 'data', colName, id)); } 
+                catch (err) { console.error(`Erro ao deletar de ${colName}:`, err); }
             };
 
             const updDoc = async (colName, id, data) => {
-                const mapFn = prev => prev.map(i => i.id === id ? { ...i, ...data } : i);
-                if(colName === 'transactions') setTransactions(mapFn);
-                if(colName === 'challenges') setChallenges(mapFn);
-                if(colName === 'wishlist') setWishlist(mapFn);
+                try { await updateDoc(doc(db, 'artifacts', appDatabaseId, 'public', 'data', colName, id), data); } 
+                catch (err) { console.error(`Erro ao atualizar em ${colName}:`, err); }
             };
 
             // Cálculos Derivados
@@ -209,7 +270,6 @@
                 }).sort((a,b) => a.days - b.days);
             }, [specialDates]);
 
-            // Formatadores Corrigidos
             const format = (v) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(parseFloat(v) || 0);
             
             const formatDateSafe = (dateString) => {
@@ -218,7 +278,6 @@
                 return isNaN(d) ? '' : d.toLocaleDateString('pt-BR', {timeZone: 'UTC'});
             };
 
-            // Nova função robusta para extrair o nome do mês e ano
             const getMonthName = (yyyyMM) => {
                 if (!yyyyMM) return '';
                 const [y, m] = yyyyMM.split('-');
@@ -236,9 +295,16 @@
                 if (!file) return;
                 try {
                     const compressedBase64 = await compressImage(file);
-                    if (type === 'profile') setSettings(prev => ({ ...prev, couplePhoto: compressedBase64 }));
-                    else if (type === 'newTransaction') setTransactionPhoto(compressedBase64);
-                    else if (type === 'editTransaction' && id) { updDoc('transactions', id, { photo: compressedBase64 }); setEditingTxIdForPhoto(null); }
+                    if (type === 'profile') {
+                        await setDoc(doc(db, 'artifacts', appDatabaseId, 'public', 'data', 'settings', 'profile'), { ...settings, couplePhoto: compressedBase64 }, {merge:true});
+                    }
+                    else if (type === 'newTransaction') {
+                        setTransactionPhoto(compressedBase64);
+                    }
+                    else if (type === 'editTransaction' && id) { 
+                        await updDoc('transactions', id, { photo: compressedBase64 }); 
+                        setEditingTxIdForPhoto(null); 
+                    }
                 } catch (err) { console.error("Erro ao processar imagem", err); }
             };
 
@@ -246,7 +312,7 @@
                 e.preventDefault(); const fd = new FormData(e.target);
                 await saveDoc('transactions', {
                     title: fd.get('title'), 
-                    amount: parseCurrency(fd.get('amount')), // Usando nossa nova conversão
+                    amount: parseCurrency(fd.get('amount')),
                     date: fd.get('date'),
                     category: fd.get('category'), paidBy: fd.get('paidBy'), split: fd.get('split'), cardId: fd.get('cardId'), photo: transactionPhoto
                 });
@@ -264,17 +330,24 @@
 
             const handleSaveSettings = async (e) => {
                 e.preventDefault(); const fd = new FormData(e.target);
-                setSettings(prev => ({ 
-                    ...prev, 
+                const newSettings = { 
                     user1Name: fd.get('user1Name'), 
                     user2Name: fd.get('user2Name'), 
                     startDate: fd.get('startDate') 
-                }));
+                };
+                await setDoc(doc(db, 'artifacts', appDatabaseId, 'public', 'data', 'settings', 'profile'), { ...settings, ...newSettings }, {merge:true});
                 setIsSettingsModalOpen(false);
             };
 
+            if (authError) return (
+                <div className="flex flex-col h-screen items-center justify-center bg-rose-50 p-6 text-center">
+                    <AlertCircle className="w-16 h-16 text-rose-500 mb-4" />
+                    <h2 className="text-xl font-black text-rose-600 mb-2">Acesso Negado</h2>
+                    <p className="text-slate-600 font-medium">{authError}</p>
+                </div>
+            );
+
             return (
-                // Alterado de sm:p-6 para sm:p-4 e sm:h-[90dvh] para sm:h-[95vh] para dar mais altura no computador
                 <div className="fixed inset-0 w-full h-[100dvh] bg-pink-50 flex justify-center font-sans text-slate-800 select-none overflow-hidden sm:p-4 sm:items-center animate-in fade-in duration-500">
                     <div className="w-full h-full sm:h-[95vh] max-w-[420px] bg-white flex flex-col relative shadow-2xl sm:rounded-[2.5rem] sm:border-[6px] sm:border-pink-200 overflow-hidden">
                         
@@ -367,7 +440,7 @@
                             {activeTab === 'transactions' && (
                                 <div className="space-y-4 animate-in fade-in duration-300">
                                     <h2 className="text-xl font-bold text-pink-600 px-1">Diário de Gastos 📸</h2>
-                                    {(!transactions || transactions.length === 0) && <p className="text-sm text-slate-400 text-center mt-10">Nenhum gasto registrado neste mês.</p>}
+                                    {(!transactions || transactions.length === 0) && <p className="text-sm text-slate-400 text-center mt-10">Nenhum gasto registado neste mês.</p>}
                                     {(transactions || []).slice().sort((a,b) => new Date(b.date||0) - new Date(a.date||0)).map(t => (
                                         <div key={t.id} className="bg-white p-4 rounded-3xl shadow-sm border border-pink-50 relative group">
                                             <div className="flex justify-between items-center mb-2">
@@ -456,7 +529,6 @@
                             {activeTab === 'dates' && (
                                 <div className="space-y-6 animate-in fade-in duration-300">
                                     <div className="bg-gradient-to-br from-pink-500 to-rose-400 p-8 rounded-[2.5rem] shadow-xl text-white text-center border-b-4 border-pink-300 relative overflow-hidden">
-                                        {/* NOVO BOTÃO DE EDITAR ADICIONADO AQUI */}
                                         <button onClick={() => setIsSettingsModalOpen(true)} className="absolute top-4 right-4 bg-white/20 hover:bg-white/30 p-2 rounded-full backdrop-blur-md transition-all active:scale-90">
                                             <Pencil className="w-4 h-4 text-white" />
                                         </button>
@@ -494,7 +566,7 @@
                                         <button onClick={() => setIsAddSubModalOpen(true)} className="text-sm font-bold text-pink-500 bg-pink-50 px-4 py-2 rounded-full shadow-sm active:scale-95">+ Novo</button>
                                     </div>
                                     <div className="bg-white rounded-[2.5rem] overflow-hidden border border-pink-50 shadow-lg">
-                                        {(!subscriptions || subscriptions.length === 0) && <p className="text-sm text-slate-400 text-center py-8">Nenhuma despesa fixa registrada.</p>}
+                                        {(!subscriptions || subscriptions.length === 0) && <p className="text-sm text-slate-400 text-center py-8">Nenhuma despesa fixa registada.</p>}
                                         {(subscriptions || []).map(s => (
                                             <div key={s.id} className="p-5 border-b border-pink-50 flex justify-between items-center group hover:bg-pink-50/30 transition-colors">
                                                 <div className="flex items-center gap-3">
@@ -562,7 +634,7 @@
                             <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-end justify-center z-50 p-2 sm:p-0">
                                 <div className="bg-white w-full max-w-md rounded-[3rem] sm:rounded-t-[3rem] sm:rounded-b-none p-6 pb-12 max-h-[95dvh] overflow-y-auto hide-scrollbar shadow-2xl">
                                     <div className="w-12 h-1.5 bg-slate-200 rounded-full mx-auto mb-6"></div>
-                                    <div className="flex justify-between items-center mb-6"><h3 className="text-2xl font-black text-pink-600 tracking-tighter">Novo Registro 🌸</h3><button onClick={() => setIsAddModalOpen(false)} className="p-2 bg-slate-100 rounded-full text-slate-400"><X className="w-5 h-5"/></button></div>
+                                    <div className="flex justify-between items-center mb-6"><h3 className="text-2xl font-black text-pink-600 tracking-tighter">Novo Registo 🌸</h3><button onClick={() => setIsAddModalOpen(false)} className="p-2 bg-slate-100 rounded-full text-slate-400"><X className="w-5 h-5"/></button></div>
                                     <form onSubmit={handleSaveTransaction} className="space-y-4">
                                         <div className="bg-slate-50 p-4 rounded-3xl"><label className="text-[10px] font-black text-slate-400 block uppercase mb-1">Descrição</label><input required name="title" className="w-full bg-transparent font-bold outline-none" placeholder="Ex: Jantar fofo..." /></div>
                                         <div className="bg-pink-50 p-4 rounded-3xl flex items-center justify-between cursor-pointer border-2 border-dashed border-pink-200" onClick={() => receiptInputRef.current?.click()}>
@@ -571,7 +643,6 @@
                                             <input type="file" ref={receiptInputRef} onChange={(e) => handlePhotoUpload(e, 'newTransaction')} className="hidden" accept="image/*" />
                                         </div>
                                         <div className="grid grid-cols-2 gap-4">
-                                            {/* Modificado para input de texto para aceitar vírgula tranquilamente */}
                                             <div className="bg-slate-50 p-4 rounded-3xl"><label className="text-[10px] font-black text-slate-400 block uppercase mb-1">Valor</label><input required name="amount" type="text" inputMode="decimal" className="w-full bg-transparent font-black outline-none" placeholder="0,00" /></div>
                                             <div className="bg-slate-50 p-4 rounded-3xl"><label className="text-[10px] font-black text-slate-400 block uppercase mb-1">Data</label><input required name="date" type="date" defaultValue={new Date().toISOString().split('T')[0]} className="w-full bg-transparent font-bold outline-none" /></div>
                                         </div>
@@ -583,7 +654,7 @@
                                             <div className="bg-slate-50 p-4 rounded-3xl"><label className="text-[10px] font-black text-slate-400 mb-1 uppercase">Quem Pagou?</label><select name="paidBy" className="w-full bg-transparent font-bold outline-none"><option value="user1">{user1Name}</option><option value="user2">{user2Name}</option></select></div>
                                             <div className="bg-slate-50 p-4 rounded-3xl"><label className="text-[10px] font-black text-slate-400 mb-1 uppercase">Divisão</label><select name="split" className="w-full bg-transparent font-bold outline-none"><option value="shared">Casal (50/50)</option><option value="individual">Apenas Meu</option></select></div>
                                         </div>
-                                        <button className="w-full bg-gradient-to-r from-pink-500 to-rose-500 text-white font-black py-5 rounded-3xl shadow-xl">Salvar no Bolso <Sparkles className="w-5 h-5"/></button>
+                                        <button className="w-full bg-gradient-to-r from-pink-500 to-rose-500 text-white font-black py-5 rounded-3xl shadow-xl">Guardar no Bolso <Sparkles className="w-5 h-5"/></button>
                                     </form>
                                 </div>
                             </div>
@@ -596,7 +667,7 @@
                                     <h3 className="text-xl font-black text-pink-600 mb-6 flex items-center gap-2"><AlertCircle className="w-6 h-6"/> Novo Alerta</h3>
                                     <form onSubmit={async e => { e.preventDefault(); const fd = new FormData(e.target); await saveDoc('budgets', { category: fd.get('category'), limit: parseCurrency(fd.get('limit')) }); setIsAddBudgetModalOpen(false); }} className="space-y-4">
                                         <div className="bg-slate-50 p-4 rounded-2xl"><label className="text-[10px] font-black text-slate-400 block mb-1 uppercase">Categoria</label><select name="category" className="w-full bg-transparent font-bold outline-none"><option>Alimentação</option><option>Lazer</option><option>Transporte</option><option>Viagem</option></select></div>
-                                        <div className="bg-slate-50 p-4 rounded-2xl"><label className="text-[10px] font-black text-slate-400 block mb-1 uppercase">Limite Máximo (R$)</label><input name="limit" type="text" inputMode="decimal" required placeholder="Ex: 300,00" className="w-full bg-transparent font-black outline-none" /></div>
+                                        <div className="bg-slate-50 p-4 rounded-2xl"><label className="text-[10px] font-black text-slate-400 block mb-1 uppercase">Limite Máximo (€)</label><input name="limit" type="text" inputMode="decimal" required placeholder="Ex: 300,00" className="w-full bg-transparent font-black outline-none" /></div>
                                         <button className="w-full bg-pink-500 text-white font-black py-4 rounded-3xl shadow-lg mt-4">Ativar Alerta 🚨</button>
                                         <button type="button" onClick={()=>setIsAddBudgetModalOpen(false)} className="w-full text-slate-400 font-bold py-2">Cancelar</button>
                                     </form>
@@ -629,7 +700,7 @@
                                     <div className="w-12 h-1.5 bg-slate-200 rounded-full mx-auto mb-6"></div>
                                     <h3 className="text-xl font-black text-pink-600 mb-6 flex items-center gap-2"><Repeat className="w-5 h-5"/> Nova Despesa Fixa</h3>
                                     <form onSubmit={async e => { e.preventDefault(); const fd = new FormData(e.target); await saveDoc('subscriptions', { name: fd.get('name'), amount: parseCurrency(fd.get('amount')), paidBy: fd.get('paidBy'), split: fd.get('split') }); setIsAddSubModalOpen(false); }} className="space-y-4">
-                                        <div className="bg-slate-50 p-4 rounded-2xl"><label className="text-[10px] font-black text-slate-400 block mb-1 uppercase">Nome</label><input name="name" required placeholder="Netflix, Aluguel..." className="w-full bg-transparent font-bold outline-none" /></div>
+                                        <div className="bg-slate-50 p-4 rounded-2xl"><label className="text-[10px] font-black text-slate-400 block mb-1 uppercase">Nome</label><input name="name" required placeholder="Netflix, Aluguer..." className="w-full bg-transparent font-bold outline-none" /></div>
                                         <div className="bg-slate-50 p-4 rounded-2xl"><label className="text-[10px] font-black text-slate-400 block mb-1 uppercase">Valor Mensal</label><input name="amount" type="text" inputMode="decimal" required placeholder="0,00" className="w-full bg-transparent font-black outline-none" /></div>
                                         <div className="grid grid-cols-2 gap-4 pb-4">
                                             <div className="bg-slate-50 p-4 rounded-2xl"><label className="text-[10px] font-black text-slate-400 block mb-1 uppercase">Quem?</label><select name="paidBy" className="w-full bg-transparent font-bold outline-none"><option value="user1">{user1Name}</option><option value="user2">{user2Name}</option></select></div>
