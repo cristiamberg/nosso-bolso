@@ -45,7 +45,7 @@
             CheckCircle2, Circle, ListTodo, Trophy, Settings
         } from 'https://esm.sh/lucide-react@0.344.0?bundle';
 
-        // --- UTILITÁRIO DE COMPRESSÃO DE IMAGEM ---
+        // --- COMPRESSÃO DE IMAGEM ---
         const compressImage = (file, maxWidth = 800) => {
             return new Promise((resolve) => {
                 const reader = new FileReader();
@@ -66,7 +66,7 @@
             });
         };
 
-        // --- AJUDANTE PARA SALVAR NA MEMÓRIA DO NAVEGADOR ---
+        // --- BANCO DE DADOS LOCAL ---
         const loadLocal = (key, defaultVal) => {
             try {
                 const item = localStorage.getItem(`nossobolso_${key}`);
@@ -74,6 +74,12 @@
             } catch (e) {
                 return defaultVal;
             }
+        };
+
+        // --- UTILITÁRIO PARA MOEDA BRASILEIRA (Aceita vírgula e ponto) ---
+        const parseCurrency = (val) => {
+            if (!val) return 0;
+            return parseFloat(String(val).replace(',', '.')) || 0;
         };
 
         function App() {
@@ -88,7 +94,7 @@
             const [showMimoModal, setShowMimoModal] = useState(false);
             const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
 
-            // Dados Sincronizados (Lendo do localStorage)
+            // Dados Sincronizados
             const [transactions, setTransactions] = useState(() => loadLocal('transactions', []));
             const [goals, setGoals] = useState(() => loadLocal('goals', []));
             const [subscriptions, setSubscriptions] = useState(() => loadLocal('subscriptions', []));
@@ -103,7 +109,7 @@
                 startDate: '2023-06-12' 
             }));
 
-            // Salvando no localStorage sempre que algo mudar
+            // Salvando automático
             useEffect(() => localStorage.setItem('nossobolso_transactions', JSON.stringify(transactions)), [transactions]);
             useEffect(() => localStorage.setItem('nossobolso_goals', JSON.stringify(goals)), [goals]);
             useEffect(() => localStorage.setItem('nossobolso_subscriptions', JSON.stringify(subscriptions)), [subscriptions]);
@@ -113,7 +119,7 @@
             useEffect(() => localStorage.setItem('nossobolso_budgets', JSON.stringify(budgets)), [budgets]);
             useEffect(() => localStorage.setItem('nossobolso_settings', JSON.stringify(settings)), [settings]);
 
-            // Estado dos Formulários
+            // Formulários
             const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
             const [mimoTitle, setMimoTitle] = useState('');
             const [selectedChallengeIcon, setSelectedChallengeIcon] = useState('Flame');
@@ -138,7 +144,6 @@
                 { id: 'pix', name: 'Pix / Dinheiro', color: 'bg-emerald-400' },
             ];
 
-            // --- FUNÇÕES DE BANCO DE DADOS (AGORA LOCAIS) ---
             const saveDoc = async (colName, data) => {
                 const newItem = { id: Date.now().toString() + Math.random(), ...data, createdAt: Date.now() };
                 if(colName === 'transactions') setTransactions(prev => [...prev, newItem]);
@@ -204,11 +209,21 @@
                 }).sort((a,b) => a.days - b.days);
             }, [specialDates]);
 
+            // Formatadores Corrigidos
             const format = (v) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(parseFloat(v) || 0);
+            
             const formatDateSafe = (dateString) => {
                 if (!dateString) return '';
                 const d = new Date(dateString);
                 return isNaN(d) ? '' : d.toLocaleDateString('pt-BR', {timeZone: 'UTC'});
+            };
+
+            // Nova função robusta para extrair o nome do mês e ano
+            const getMonthName = (yyyyMM) => {
+                if (!yyyyMM) return '';
+                const [y, m] = yyyyMM.split('-');
+                const d = new Date(y, m - 1, 1);
+                return d.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
             };
 
             const getCategoryIcon = (cat) => {
@@ -216,29 +231,23 @@
                 return React.cloneElement(icons[cat] || <ShoppingCart/>, { className: "w-5 h-5 text-pink-400" });
             };
 
-            // Handlers de Ação
             const handlePhotoUpload = async (e, type, id = null) => {
                 const file = e.target.files[0];
                 if (!file) return;
                 try {
                     const compressedBase64 = await compressImage(file);
-                    if (type === 'profile') {
-                        setSettings(prev => ({ ...prev, couplePhoto: compressedBase64 }));
-                    }
-                    else if (type === 'newTransaction') {
-                        setTransactionPhoto(compressedBase64);
-                    }
-                    else if (type === 'editTransaction' && id) { 
-                        updDoc('transactions', id, { photo: compressedBase64 }); 
-                        setEditingTxIdForPhoto(null); 
-                    }
+                    if (type === 'profile') setSettings(prev => ({ ...prev, couplePhoto: compressedBase64 }));
+                    else if (type === 'newTransaction') setTransactionPhoto(compressedBase64);
+                    else if (type === 'editTransaction' && id) { updDoc('transactions', id, { photo: compressedBase64 }); setEditingTxIdForPhoto(null); }
                 } catch (err) { console.error("Erro ao processar imagem", err); }
             };
 
             const handleSaveTransaction = async (e) => {
                 e.preventDefault(); const fd = new FormData(e.target);
                 await saveDoc('transactions', {
-                    title: fd.get('title'), amount: parseFloat(fd.get('amount')) || 0, date: fd.get('date'),
+                    title: fd.get('title'), 
+                    amount: parseCurrency(fd.get('amount')), // Usando nossa nova conversão
+                    date: fd.get('date'),
                     category: fd.get('category'), paidBy: fd.get('paidBy'), split: fd.get('split'), cardId: fd.get('cardId'), photo: transactionPhoto
                 });
                 setIsAddModalOpen(false); setTransactionPhoto(null);
@@ -246,7 +255,7 @@
 
             const handlePayWithMimoSubmit = async (e) => {
                 e.preventDefault(); const fd = new FormData(e.target);
-                const amount = parseFloat(fd.get('amount')) || 0;
+                const amount = parseCurrency(fd.get('amount'));
                 const title = fd.get('title') || 'Mimo Especial';
                 const debtor = stats.u1Bal > 0 ? 'user2' : 'user1';
                 await saveDoc('transactions', { title: `Mimo 🎁: ${title}`, amount, date: new Date().toISOString().split('T')[0], category: 'Lazer', paidBy: debtor, split: 'mimo', cardId: 'pix', photo: null });
@@ -262,11 +271,12 @@
                     startDate: fd.get('startDate') 
                 }));
                 setIsSettingsModalOpen(false);
-            }
+            };
 
             return (
-                <div className="fixed inset-0 w-full h-[100dvh] bg-pink-50 flex justify-center font-sans text-slate-800 select-none overflow-hidden sm:p-6 sm:items-center animate-in fade-in duration-500">
-                    <div className="w-full h-full sm:h-[90dvh] max-w-md bg-white flex flex-col relative shadow-2xl sm:rounded-[3rem] sm:border-[8px] sm:border-pink-100">
+                // Alterado de sm:p-6 para sm:p-4 e sm:h-[90dvh] para sm:h-[95vh] para dar mais altura no computador
+                <div className="fixed inset-0 w-full h-[100dvh] bg-pink-50 flex justify-center font-sans text-slate-800 select-none overflow-hidden sm:p-4 sm:items-center animate-in fade-in duration-500">
+                    <div className="w-full h-full sm:h-[95vh] max-w-[420px] bg-white flex flex-col relative shadow-2xl sm:rounded-[2.5rem] sm:border-[6px] sm:border-pink-200 overflow-hidden">
                         
                         <header className="shrink-0 bg-gradient-to-r from-pink-400 to-rose-300 text-white p-6 pb-8 z-20 border-b-4 border-pink-200">
                             <div className="flex justify-between items-center">
@@ -289,13 +299,13 @@
                             </div>
                         </header>
 
-                        <main className="flex-1 overflow-y-auto hide-scrollbar p-4 pb-32 -mt-4 bg-white z-10 pt-8">
+                        <main className="flex-1 overflow-y-auto hide-scrollbar p-4 pb-28 -mt-4 bg-white z-10 pt-8 rounded-t-[1.5rem]">
                             
                             {activeTab === 'dashboard' && (
                                 <div className="space-y-5 animate-in fade-in duration-300">
                                     <div className="flex justify-between items-center bg-white p-2 rounded-full border border-pink-100 shadow-sm">
                                         <button onClick={() => { const [y, m] = selectedMonth.split('-'); const d = new Date(y, m-2); setSelectedMonth(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`); }} className="p-3 bg-pink-50 rounded-full text-pink-500 active:scale-90"><ChevronLeft/></button>
-                                        <span className="font-bold capitalize">{formatDateSafe(`${selectedMonth}-02`).split(' de ').slice(1).join(' de ')}</span>
+                                        <span className="font-bold capitalize text-slate-700">{getMonthName(selectedMonth)}</span>
                                         <button onClick={() => { const [y, m] = selectedMonth.split('-'); const d = new Date(y, m); setSelectedMonth(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`); }} className="p-3 bg-pink-50 rounded-full text-pink-500 active:scale-90"><ChevronRight/></button>
                                     </div>
 
@@ -446,6 +456,11 @@
                             {activeTab === 'dates' && (
                                 <div className="space-y-6 animate-in fade-in duration-300">
                                     <div className="bg-gradient-to-br from-pink-500 to-rose-400 p-8 rounded-[2.5rem] shadow-xl text-white text-center border-b-4 border-pink-300 relative overflow-hidden">
+                                        {/* NOVO BOTÃO DE EDITAR ADICIONADO AQUI */}
+                                        <button onClick={() => setIsSettingsModalOpen(true)} className="absolute top-4 right-4 bg-white/20 hover:bg-white/30 p-2 rounded-full backdrop-blur-md transition-all active:scale-90">
+                                            <Pencil className="w-4 h-4 text-white" />
+                                        </button>
+                                        
                                         <p className="text-[10px] font-black uppercase tracking-widest mb-2 opacity-80 flex items-center justify-center gap-1"><Clock className="w-3 h-3"/> Nossa História</p>
                                         <h2 className="text-4xl font-black mb-1 tracking-tighter">Vivendo o Amor</h2>
                                         <p className="text-sm font-bold opacity-90 mt-2 bg-white/20 inline-block px-4 py-1.5 rounded-full border border-white/30 backdrop-blur-sm">Desde {formatDateSafe(settings?.startDate ? `${settings.startDate}T00:00:00` : new Date())}</p>
@@ -506,7 +521,7 @@
                             )}
                         </main>
 
-                        <nav className="shrink-0 bg-white/95 backdrop-blur-lg border-t border-pink-100 flex justify-around p-2 pb-10 pt-3 z-30 shadow-[0_-10px_30px_rgba(0,0,0,0.03)] sm:pb-4">
+                        <nav className="shrink-0 bg-white/95 backdrop-blur-lg border-t border-pink-100 flex justify-around p-3 pb-6 sm:pb-4 z-30 shadow-[0_-10px_30px_rgba(0,0,0,0.03)]">
                             {[
                                 { id: 'dashboard', icon: Home, label: 'Resumo' },
                                 { id: 'transactions', icon: ReceiptText, label: 'Gastos' },
@@ -522,12 +537,12 @@
                         </nav>
 
                         {['dashboard', 'transactions'].includes(activeTab) && (
-                            <button onClick={() => { setTransactionPhoto(null); setIsAddModalOpen(true); }} className="absolute bottom-28 right-6 w-16 h-16 bg-gradient-to-br from-pink-500 to-rose-400 text-white rounded-full shadow-[0_15px_40px_-10px_rgba(236,72,153,0.5)] flex items-center justify-center active:scale-75 transition-all z-20 border-4 border-white sm:bottom-24"><Plus className="w-8 h-8" /></button>
+                            <button onClick={() => { setTransactionPhoto(null); setIsAddModalOpen(true); }} className="absolute bottom-24 sm:bottom-20 right-6 w-16 h-16 bg-gradient-to-br from-pink-500 to-rose-400 text-white rounded-full shadow-[0_15px_40px_-10px_rgba(236,72,153,0.5)] flex items-center justify-center active:scale-75 transition-all z-20 border-4 border-white"><Plus className="w-8 h-8" /></button>
                         )}
 
                         {isSettingsModalOpen && (
-                            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-end justify-center z-50">
-                                <div className="bg-white w-full max-w-md rounded-t-[3rem] p-6 pb-12 shadow-2xl">
+                            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-end justify-center z-50 p-2 sm:p-0">
+                                <div className="bg-white w-full max-w-md rounded-[3rem] sm:rounded-t-[3rem] sm:rounded-b-none p-6 pb-12 shadow-2xl">
                                     <div className="w-12 h-1.5 bg-slate-200 rounded-full mx-auto mb-6"></div>
                                     <div className="flex justify-between items-center mb-6">
                                         <h3 className="text-2xl font-black text-pink-600 tracking-tighter">Configurações ⚙️</h3>
@@ -544,8 +559,8 @@
                         )}
 
                         {isAddModalOpen && (
-                            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-end justify-center z-50">
-                                <div className="bg-white w-full max-w-md rounded-t-[3rem] p-6 pb-12 max-h-[95dvh] overflow-y-auto hide-scrollbar shadow-2xl">
+                            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-end justify-center z-50 p-2 sm:p-0">
+                                <div className="bg-white w-full max-w-md rounded-[3rem] sm:rounded-t-[3rem] sm:rounded-b-none p-6 pb-12 max-h-[95dvh] overflow-y-auto hide-scrollbar shadow-2xl">
                                     <div className="w-12 h-1.5 bg-slate-200 rounded-full mx-auto mb-6"></div>
                                     <div className="flex justify-between items-center mb-6"><h3 className="text-2xl font-black text-pink-600 tracking-tighter">Novo Registro 🌸</h3><button onClick={() => setIsAddModalOpen(false)} className="p-2 bg-slate-100 rounded-full text-slate-400"><X className="w-5 h-5"/></button></div>
                                     <form onSubmit={handleSaveTransaction} className="space-y-4">
@@ -556,7 +571,8 @@
                                             <input type="file" ref={receiptInputRef} onChange={(e) => handlePhotoUpload(e, 'newTransaction')} className="hidden" accept="image/*" />
                                         </div>
                                         <div className="grid grid-cols-2 gap-4">
-                                            <div className="bg-slate-50 p-4 rounded-3xl"><label className="text-[10px] font-black text-slate-400 block uppercase mb-1">Valor</label><input required name="amount" type="number" step="0.01" className="w-full bg-transparent font-black outline-none" placeholder="0.00" /></div>
+                                            {/* Modificado para input de texto para aceitar vírgula tranquilamente */}
+                                            <div className="bg-slate-50 p-4 rounded-3xl"><label className="text-[10px] font-black text-slate-400 block uppercase mb-1">Valor</label><input required name="amount" type="text" inputMode="decimal" className="w-full bg-transparent font-black outline-none" placeholder="0,00" /></div>
                                             <div className="bg-slate-50 p-4 rounded-3xl"><label className="text-[10px] font-black text-slate-400 block uppercase mb-1">Data</label><input required name="date" type="date" defaultValue={new Date().toISOString().split('T')[0]} className="w-full bg-transparent font-bold outline-none" /></div>
                                         </div>
                                         <div className="grid grid-cols-2 gap-4">
@@ -574,13 +590,13 @@
                         )}
 
                         {isAddBudgetModalOpen && (
-                            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-end justify-center z-50">
-                                <div className="bg-white w-full max-w-md rounded-t-[3rem] p-6 pb-12 shadow-2xl">
+                            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-end justify-center z-50 p-2 sm:p-0">
+                                <div className="bg-white w-full max-w-md rounded-[3rem] sm:rounded-t-[3rem] sm:rounded-b-none p-6 pb-12 shadow-2xl">
                                     <div className="w-12 h-1.5 bg-slate-200 rounded-full mx-auto mb-6"></div>
                                     <h3 className="text-xl font-black text-pink-600 mb-6 flex items-center gap-2"><AlertCircle className="w-6 h-6"/> Novo Alerta</h3>
-                                    <form onSubmit={async e => { e.preventDefault(); const fd = new FormData(e.target); await saveDoc('budgets', { category: fd.get('category'), limit: parseFloat(fd.get('limit'))||0 }); setIsAddBudgetModalOpen(false); }} className="space-y-4">
+                                    <form onSubmit={async e => { e.preventDefault(); const fd = new FormData(e.target); await saveDoc('budgets', { category: fd.get('category'), limit: parseCurrency(fd.get('limit')) }); setIsAddBudgetModalOpen(false); }} className="space-y-4">
                                         <div className="bg-slate-50 p-4 rounded-2xl"><label className="text-[10px] font-black text-slate-400 block mb-1 uppercase">Categoria</label><select name="category" className="w-full bg-transparent font-bold outline-none"><option>Alimentação</option><option>Lazer</option><option>Transporte</option><option>Viagem</option></select></div>
-                                        <div className="bg-slate-50 p-4 rounded-2xl"><label className="text-[10px] font-black text-slate-400 block mb-1 uppercase">Limite Máximo (R$)</label><input name="limit" type="number" step="0.01" required placeholder="Ex: 300" className="w-full bg-transparent font-black outline-none" /></div>
+                                        <div className="bg-slate-50 p-4 rounded-2xl"><label className="text-[10px] font-black text-slate-400 block mb-1 uppercase">Limite Máximo (R$)</label><input name="limit" type="text" inputMode="decimal" required placeholder="Ex: 300,00" className="w-full bg-transparent font-black outline-none" /></div>
                                         <button className="w-full bg-pink-500 text-white font-black py-4 rounded-3xl shadow-lg mt-4">Ativar Alerta 🚨</button>
                                         <button type="button" onClick={()=>setIsAddBudgetModalOpen(false)} className="w-full text-slate-400 font-bold py-2">Cancelar</button>
                                     </form>
@@ -589,8 +605,8 @@
                         )}
 
                         {isAddChallengeModalOpen && (
-                            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-end justify-center z-50">
-                                <div className="bg-white w-full max-w-md rounded-t-[3rem] p-6 pb-12 shadow-2xl">
+                            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-end justify-center z-50 p-2 sm:p-0">
+                                <div className="bg-white w-full max-w-md rounded-[3rem] sm:rounded-t-[3rem] sm:rounded-b-none p-6 pb-12 shadow-2xl">
                                     <div className="w-12 h-1.5 bg-slate-200 rounded-full mx-auto mb-6"></div>
                                     <h3 className="text-xl font-black text-purple-600 mb-6 flex items-center gap-2"><Trophy className="w-6 h-6"/> Novo Desafio</h3>
                                     <form onSubmit={async e => { e.preventDefault(); const fd = new FormData(e.target); await saveDoc('challenges', { title: fd.get('title'), target: parseInt(fd.get('target'))||1, progress: 0, icon: selectedChallengeIcon }); setIsAddChallengeModalOpen(false); }} className="space-y-4">
@@ -608,13 +624,13 @@
                         )}
 
                         {isAddSubModalOpen && (
-                            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-end justify-center z-50">
-                                <div className="bg-white w-full max-w-md rounded-t-[3rem] p-6 pb-12 shadow-2xl">
+                            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-end justify-center z-50 p-2 sm:p-0">
+                                <div className="bg-white w-full max-w-md rounded-[3rem] sm:rounded-t-[3rem] sm:rounded-b-none p-6 pb-12 shadow-2xl">
                                     <div className="w-12 h-1.5 bg-slate-200 rounded-full mx-auto mb-6"></div>
                                     <h3 className="text-xl font-black text-pink-600 mb-6 flex items-center gap-2"><Repeat className="w-5 h-5"/> Nova Despesa Fixa</h3>
-                                    <form onSubmit={async e => { e.preventDefault(); const fd = new FormData(e.target); await saveDoc('subscriptions', { name: fd.get('name'), amount: parseFloat(fd.get('amount'))||0, paidBy: fd.get('paidBy'), split: fd.get('split') }); setIsAddSubModalOpen(false); }} className="space-y-4">
+                                    <form onSubmit={async e => { e.preventDefault(); const fd = new FormData(e.target); await saveDoc('subscriptions', { name: fd.get('name'), amount: parseCurrency(fd.get('amount')), paidBy: fd.get('paidBy'), split: fd.get('split') }); setIsAddSubModalOpen(false); }} className="space-y-4">
                                         <div className="bg-slate-50 p-4 rounded-2xl"><label className="text-[10px] font-black text-slate-400 block mb-1 uppercase">Nome</label><input name="name" required placeholder="Netflix, Aluguel..." className="w-full bg-transparent font-bold outline-none" /></div>
-                                        <div className="bg-slate-50 p-4 rounded-2xl"><label className="text-[10px] font-black text-slate-400 block mb-1 uppercase">Valor Mensal</label><input name="amount" type="number" step="0.01" required placeholder="0.00" className="w-full bg-transparent font-black outline-none" /></div>
+                                        <div className="bg-slate-50 p-4 rounded-2xl"><label className="text-[10px] font-black text-slate-400 block mb-1 uppercase">Valor Mensal</label><input name="amount" type="text" inputMode="decimal" required placeholder="0,00" className="w-full bg-transparent font-black outline-none" /></div>
                                         <div className="grid grid-cols-2 gap-4 pb-4">
                                             <div className="bg-slate-50 p-4 rounded-2xl"><label className="text-[10px] font-black text-slate-400 block mb-1 uppercase">Quem?</label><select name="paidBy" className="w-full bg-transparent font-bold outline-none"><option value="user1">{user1Name}</option><option value="user2">{user2Name}</option></select></div>
                                             <div className="bg-slate-50 p-4 rounded-2xl"><label className="text-[10px] font-black text-slate-400 block mb-1 uppercase">Divisão</label><select name="split" className="w-full bg-transparent font-bold outline-none"><option value="shared">Casal</option><option value="individual">Individual</option></select></div>
@@ -627,8 +643,8 @@
                         )}
 
                         {isAddDateModalOpen && (
-                            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-end justify-center z-50">
-                                <div className="bg-white w-full max-w-md rounded-t-[3rem] p-6 pb-12 shadow-2xl">
+                            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-end justify-center z-50 p-2 sm:p-0">
+                                <div className="bg-white w-full max-w-md rounded-[3rem] sm:rounded-t-[3rem] sm:rounded-b-none p-6 pb-12 shadow-2xl">
                                     <div className="w-12 h-1.5 bg-slate-200 rounded-full mx-auto mb-6"></div>
                                     <h3 className="text-xl font-black text-pink-600 mb-6 flex items-center gap-2"><CalendarDays className="w-6 h-6"/> Momento Inesquecível</h3>
                                     <form onSubmit={async e => { e.preventDefault(); const fd = new FormData(e.target); await saveDoc('specialDates', { title: fd.get('title'), date: fd.get('date'), isYearly: dateFormIsYearly }); setIsAddDateModalOpen(false); }} className="space-y-4">
@@ -647,12 +663,12 @@
 
                         {showMimoModal && (
                             <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-                                <div className="bg-white w-full max-w-sm rounded-[2.5rem] p-6 text-center shadow-2xl border-4 border-pink-100">
+                                <div className="bg-white w-full max-w-sm rounded-[3rem] p-6 text-center shadow-2xl border-4 border-pink-100">
                                     <Gift className="w-12 h-12 text-pink-500 mx-auto mb-4" />
                                     <h3 className="text-xl font-black text-pink-600 mb-2 tracking-tighter">Pagar com Mimo 🎁</h3>
                                     <form onSubmit={handlePayWithMimoSubmit} className="space-y-4 text-left">
                                         <div className="bg-slate-50 p-4 rounded-2xl"><label className="text-[10px] font-black text-slate-400 uppercase block mb-1">Qual o Mimo?</label><input required name="title" value={mimoTitle} onChange={e=>setMimoTitle(e.target.value)} placeholder="Ex: Pizza dos sonhos..." className="w-full bg-transparent font-bold outline-none" /></div>
-                                        <div className="bg-slate-50 p-4 rounded-2xl"><label className="text-[10px] font-black text-slate-400 uppercase block mb-1">Valor Estimado</label><input required name="amount" type="number" step="0.01" placeholder="0.00" className="w-full bg-transparent font-black outline-none" /></div>
+                                        <div className="bg-slate-50 p-4 rounded-2xl"><label className="text-[10px] font-black text-slate-400 uppercase block mb-1">Valor Estimado</label><input required name="amount" type="text" inputMode="decimal" placeholder="0,00" className="w-full bg-transparent font-black outline-none" /></div>
                                         <button className="w-full bg-pink-500 text-white font-black py-4 rounded-3xl shadow-lg">Quitar Dívida com Amor 💖</button>
                                         <button type="button" onClick={()=>setShowMimoModal(false)} className="w-full text-slate-400 font-bold py-2 text-sm">Talvez depois</button>
                                     </form>
