@@ -129,8 +129,9 @@
             const [showMimoModal, setShowMimoModal] = useState(false);
             const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
             
-            // Estado para apagar parcelados
+            // Estado para apagar parcelados e editar Despesas Fixas
             const [txToDelete, setTxToDelete] = useState(null);
+            const [editingSub, setEditingSub] = useState(null);
 
             // Dados Sincronizados
             const [transactions, setTransactions] = useState([]);
@@ -157,7 +158,8 @@
             const [wishlistInput, setWishlistInput] = useState('');
             const [wishlistWho, setWishlistWho] = useState('user1');
             const [transactionPhoto, setTransactionPhoto] = useState(null);
-            const [dateFormIsYearly, setDateFormIsYearly] = useState(true);
+            const [editingTxIdForPhoto, setEditingTxIdForPhoto] = useState(null);
+            const [dateFormFrequency, setDateFormFrequency] = useState('yearly');
             const [searchTerm, setSearchTerm] = useState(''); // Pesquisa de gastos
             const [newNote, setNewNote] = useState(''); // Novo recado
             
@@ -266,13 +268,18 @@
                 });
 
                 (subscriptions || []).forEach(s => {
-                    const a = parseFloat(s.amount) || 0;
-                    if (s.split === 'shared') { if(s.paidBy === 'user1') u1PS += a; else u2PS += a; }
+                    // Considerar apenas as despesas ativas neste mês
+                    const isActive = (!s.startMonth || s.startMonth <= selectedMonth) && 
+                                     (!s.endMonth || s.endMonth >= selectedMonth);
+                    if (isActive) {
+                        const a = parseFloat(s.amount) || 0;
+                        if (s.split === 'shared') { if(s.paidBy === 'user1') u1PS += a; else u2PS += a; }
+                    }
                 });
 
                 const shared = u1PS + u2PS;
                 return { total: shared, u1PS, u2PS, u1Bal: (u1PS - (shared/2)) + u1M - u2M, u2Bal: (u2PS - (shared/2)) + u2M - u1M };
-            }, [currentMonthTransactions, subscriptions]);
+            }, [currentMonthTransactions, subscriptions, selectedMonth]);
 
             const categoryTotals = useMemo(() => {
                 const totals = {};
@@ -297,7 +304,20 @@
                 return (specialDates || []).map(d => {
                     let target = new Date(d.date ? `${d.date}T00:00:00` : today);
                     if (isNaN(target)) target = new Date();
-                    if(d.isYearly){ target.setFullYear(today.getFullYear()); if(target < today) target.setFullYear(today.getFullYear() + 1); }
+                    
+                    const freq = d.frequency || (d.isYearly ? 'yearly' : 'once');
+                    
+                    if (freq === 'monthly') {
+                        let nextDate = new Date(today.getFullYear(), today.getMonth(), target.getDate());
+                        if (nextDate < today) {
+                            nextDate = new Date(today.getFullYear(), today.getMonth() + 1, target.getDate());
+                        }
+                        target = nextDate;
+                    } else if (freq === 'yearly') {
+                        target.setFullYear(today.getFullYear());
+                        if (target < today) target.setFullYear(today.getFullYear() + 1);
+                    }
+                    
                     return { ...d, days: Math.max(0, Math.ceil((target - today)/(1000*60*60*24))), next: target };
                 }).sort((a,b) => a.days - b.days);
             }, [specialDates]);
@@ -382,13 +402,32 @@
                 if(mode === 'single' || !txToDelete.groupId) {
                     await delDoc('transactions', txToDelete.id);
                 } else if (mode === 'all') {
-                    // Busca todas do mesmo grupo e apaga
                     const toDelete = transactions.filter(t => t.groupId === txToDelete.groupId);
                     for (const t of toDelete) {
                         await delDoc('transactions', t.id);
                     }
                 }
                 setTxToDelete(null);
+            };
+
+            const handleSaveSubscription = async (e) => {
+                e.preventDefault(); 
+                const fd = new FormData(e.target);
+                const subData = { 
+                    name: fd.get('name'), 
+                    amount: parseCurrency(fd.get('amount')), 
+                    paidBy: fd.get('paidBy'), 
+                    split: fd.get('split'),
+                    startMonth: fd.get('startMonth'),
+                    endMonth: fd.get('endMonth') || null
+                };
+                if (editingSub) {
+                    await updDoc('subscriptions', editingSub.id, subData);
+                } else {
+                    await saveDoc('subscriptions', subData);
+                }
+                setIsAddSubModalOpen(false);
+                setEditingSub(null);
             };
 
             const handleSaveSettings = async (e) => {
@@ -405,7 +444,7 @@
             const handleAddNote = async (e) => {
                 e.preventDefault();
                 if(!newNote.trim()) return;
-                const author = stats.u1Bal > 0 ? 'user1' : 'user2'; // Quem deve menos escreve rosa? Apenas uma brincadeira, vou usar quem envia baseado no clique (criado botões de quem envia).
+                const author = stats.u1Bal > 0 ? 'user1' : 'user2'; 
             };
 
             // Telas de Erro/Loading
@@ -699,29 +738,43 @@
                                 <div className="space-y-6 animate-in fade-in duration-300">
                                     <div className="flex justify-between items-center px-1">
                                         <h2 className="text-xl font-bold text-pink-600 flex items-center gap-2"><Repeat className="w-5 h-5"/> Despesas Fixas</h2>
-                                        <button onClick={() => setIsAddSubModalOpen(true)} className="text-sm font-bold text-pink-500 bg-pink-50 px-4 py-2 rounded-full shadow-sm active:scale-95">+ Novo</button>
+                                        <button onClick={() => { setEditingSub(null); setIsAddSubModalOpen(true); }} className="text-sm font-bold text-pink-500 bg-pink-50 px-4 py-2 rounded-full shadow-sm active:scale-95">+ Novo</button>
                                     </div>
                                     <div className="bg-white rounded-[2.5rem] overflow-hidden border border-pink-50 shadow-lg">
                                         {(!subscriptions || subscriptions.length === 0) && <p className="text-sm text-slate-400 text-center py-8">Nenhuma despesa fixa registada.</p>}
-                                        {(subscriptions || []).map(s => (
-                                            <div key={s.id} className="p-5 border-b border-pink-50 flex justify-between items-center group hover:bg-pink-50/30 transition-colors">
+                                        {(subscriptions || []).map(s => {
+                                            const isActive = (!s.startMonth || s.startMonth <= selectedMonth) && (!s.endMonth || s.endMonth >= selectedMonth);
+                                            return (
+                                            <div key={s.id} className={`p-5 border-b border-pink-50 flex justify-between items-center group hover:bg-pink-50/30 transition-colors ${!isActive ? 'opacity-50 grayscale' : ''}`}>
                                                 <div className="flex items-center gap-3">
                                                     <div className="w-10 h-10 bg-purple-50 rounded-full flex items-center justify-center text-purple-400 shrink-0 shadow-inner"><CreditCard className="w-5 h-5"/></div>
                                                     <div>
                                                         <p className="font-bold text-slate-800 text-sm truncate max-w-[150px]">{s.name}</p>
-                                                        <p className="text-[10px] text-slate-400 font-black uppercase">{s.paidBy === 'user1' ? user1Name : user2Name} • {s.split === 'shared' ? 'Casal' : 'Indiv.'}</p>
+                                                        <p className="text-[10px] text-slate-400 font-black uppercase">
+                                                            {s.paidBy === 'user1' ? user1Name : user2Name} • {s.split === 'shared' ? 'Casal' : 'Indiv.'}
+                                                            {s.startMonth && ` • Desde ${s.startMonth.split('-').reverse().join('/')}`}
+                                                            {s.endMonth && ` até ${s.endMonth.split('-').reverse().join('/')}`}
+                                                        </p>
                                                     </div>
                                                 </div>
-                                                <div className="flex items-center gap-3">
-                                                    <p className="font-black text-slate-800 text-base">{format(s.amount)}</p>
-                                                    <button onClick={() => delDoc('subscriptions', s.id)} className="opacity-0 group-hover:opacity-100 text-rose-200 p-2 transition-opacity"><Trash2 className="w-4 h-4"/></button>
+                                                <div className="flex items-center gap-2">
+                                                    <div className="text-right">
+                                                        <p className="font-black text-slate-800 text-base">{format(s.amount)}</p>
+                                                        {!isActive && <p className="text-[8px] text-slate-400 font-bold uppercase mt-0.5">Inativa no Mês</p>}
+                                                    </div>
+                                                    <div className="flex flex-col gap-1 ml-2">
+                                                        <button onClick={() => { setEditingSub(s); setIsAddSubModalOpen(true); }} className="opacity-0 group-hover:opacity-100 text-sky-400 p-1 transition-opacity"><Pencil className="w-4 h-4"/></button>
+                                                        <button onClick={() => delDoc('subscriptions', s.id)} className="opacity-0 group-hover:opacity-100 text-rose-300 p-1 transition-opacity"><Trash2 className="w-4 h-4"/></button>
+                                                    </div>
                                                 </div>
                                             </div>
-                                        ))}
+                                        )})}
                                         {subscriptions && subscriptions.length > 0 && (
                                             <div className="bg-pink-50/50 p-6 flex justify-between items-center border-t border-pink-100">
-                                                <span className="font-bold text-pink-600">Total Mensal</span>
-                                                <span className="text-xl font-black text-pink-600">{format(subscriptions.reduce((acc, s) => acc + (parseFloat(s.amount)||0), 0))}</span>
+                                                <span className="font-bold text-pink-600">Total {getMonthName(selectedMonth)}</span>
+                                                <span className="text-xl font-black text-pink-600">
+                                                    {format(subscriptions.filter(s => (!s.startMonth || s.startMonth <= selectedMonth) && (!s.endMonth || s.endMonth >= selectedMonth)).reduce((acc, s) => acc + (parseFloat(s.amount)||0), 0))}
+                                                </span>
                                             </div>
                                         )}
                                     </div>
@@ -901,18 +954,24 @@
 
                         {isAddSubModalOpen && (
                             <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-end justify-center z-50 p-2 sm:p-0">
-                                <div className="bg-white w-full max-w-md rounded-[3rem] sm:rounded-t-[3rem] sm:rounded-b-none p-6 pb-16 sm:pb-12 shadow-2xl">
+                                <div className="bg-white w-full max-w-md rounded-[3rem] sm:rounded-t-[3rem] sm:rounded-b-none p-6 pb-16 sm:pb-12 shadow-2xl max-h-[90dvh] overflow-y-auto hide-scrollbar">
                                     <div className="w-12 h-1.5 bg-slate-200 rounded-full mx-auto mb-6"></div>
-                                    <h3 className="text-xl font-black text-pink-600 mb-6 flex items-center gap-2"><Repeat className="w-5 h-5"/> Nova Despesa Fixa</h3>
-                                    <form onSubmit={async e => { e.preventDefault(); const fd = new FormData(e.target); await saveDoc('subscriptions', { name: fd.get('name'), amount: parseCurrency(fd.get('amount')), paidBy: fd.get('paidBy'), split: fd.get('split') }); setIsAddSubModalOpen(false); }} className="space-y-4">
-                                        <div className="bg-slate-50 p-4 rounded-2xl"><label className="text-[10px] font-black text-slate-400 block mb-1 uppercase">Nome</label><input name="name" required placeholder="Netflix, Aluguer..." className="w-full bg-transparent font-bold outline-none" /></div>
-                                        <div className="bg-slate-50 p-4 rounded-2xl"><label className="text-[10px] font-black text-slate-400 block mb-1 uppercase">Valor Mensal</label><input name="amount" type="text" inputMode="decimal" required placeholder="0,00" className="w-full bg-transparent font-black outline-none" /></div>
+                                    <h3 className="text-xl font-black text-pink-600 mb-6 flex items-center gap-2"><Repeat className="w-5 h-5"/> {editingSub ? 'Editar Despesa Fixa' : 'Nova Despesa Fixa'}</h3>
+                                    <form onSubmit={handleSaveSubscription} className="space-y-4">
+                                        <div className="bg-slate-50 p-4 rounded-2xl"><label className="text-[10px] font-black text-slate-400 block mb-1 uppercase">Nome</label><input name="name" defaultValue={editingSub?.name} required placeholder="Netflix, Aluguer..." className="w-full bg-transparent font-bold outline-none" /></div>
+                                        <div className="bg-slate-50 p-4 rounded-2xl"><label className="text-[10px] font-black text-slate-400 block mb-1 uppercase">Valor Mensal</label><input name="amount" defaultValue={editingSub?.amount ? String(editingSub.amount).replace('.', ',') : ''} type="text" inputMode="decimal" required placeholder="0,00" className="w-full bg-transparent font-black outline-none" /></div>
+                                        
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div className="bg-slate-50 p-4 rounded-2xl"><label className="text-[10px] font-black text-slate-400 block mb-1 uppercase">Mês de Início</label><input name="startMonth" type="month" required defaultValue={editingSub?.startMonth || selectedMonth} className="w-full bg-transparent font-bold outline-none" /></div>
+                                            <div className="bg-slate-50 p-4 rounded-2xl"><label className="text-[10px] font-black text-slate-400 block mb-1 uppercase">Mês de Fim (Opcional)</label><input name="endMonth" type="month" defaultValue={editingSub?.endMonth || ''} className="w-full bg-transparent font-bold outline-none" /></div>
+                                        </div>
+
                                         <div className="grid grid-cols-2 gap-4 pb-4">
-                                            <div className="bg-slate-50 p-4 rounded-2xl"><label className="text-[10px] font-black text-slate-400 block mb-1 uppercase">Quem?</label><select name="paidBy" className="w-full bg-transparent font-bold outline-none"><option value="user1">{user1Name}</option><option value="user2">{user2Name}</option></select></div>
-                                            <div className="bg-slate-50 p-4 rounded-2xl"><label className="text-[10px] font-black text-slate-400 block mb-1 uppercase">Divisão</label><select name="split" className="w-full bg-transparent font-bold outline-none"><option value="shared">Casal</option><option value="individual">Individual</option></select></div>
+                                            <div className="bg-slate-50 p-4 rounded-2xl"><label className="text-[10px] font-black text-slate-400 block mb-1 uppercase">Quem?</label><select name="paidBy" defaultValue={editingSub?.paidBy || 'user1'} className="w-full bg-transparent font-bold outline-none"><option value="user1">{user1Name}</option><option value="user2">{user2Name}</option></select></div>
+                                            <div className="bg-slate-50 p-4 rounded-2xl"><label className="text-[10px] font-black text-slate-400 block mb-1 uppercase">Divisão</label><select name="split" defaultValue={editingSub?.split || 'shared'} className="w-full bg-transparent font-bold outline-none"><option value="shared">Casal</option><option value="individual">Individual</option></select></div>
                                         </div>
                                         <button className="w-full bg-pink-500 text-white font-black py-4 rounded-3xl shadow-lg">Guardar Fixa 🎀</button>
-                                        <button type="button" onClick={()=>setIsAddSubModalOpen(false)} className="w-full text-slate-400 font-bold py-2">Cancelar</button>
+                                        <button type="button" onClick={() => { setIsAddSubModalOpen(false); setEditingSub(null); }} className="w-full text-slate-400 font-bold py-2">Cancelar</button>
                                     </form>
                                 </div>
                             </div>
@@ -923,12 +982,13 @@
                                 <div className="bg-white w-full max-w-md rounded-[3rem] sm:rounded-t-[3rem] sm:rounded-b-none p-6 pb-16 sm:pb-12 shadow-2xl">
                                     <div className="w-12 h-1.5 bg-slate-200 rounded-full mx-auto mb-6"></div>
                                     <h3 className="text-xl font-black text-pink-600 mb-6 flex items-center gap-2"><CalendarDays className="w-6 h-6"/> Momento Inesquecível</h3>
-                                    <form onSubmit={async e => { e.preventDefault(); const fd = new FormData(e.target); await saveDoc('specialDates', { title: fd.get('title'), date: fd.get('date'), isYearly: dateFormIsYearly }); setIsAddDateModalOpen(false); }} className="space-y-4">
+                                    <form onSubmit={async e => { e.preventDefault(); const fd = new FormData(e.target); await saveDoc('specialDates', { title: fd.get('title'), date: fd.get('date'), frequency: dateFormFrequency }); setIsAddDateModalOpen(false); }} className="space-y-4">
                                         <div className="bg-slate-50 p-4 rounded-2xl"><label className="text-[10px] font-black text-slate-400 block mb-1 uppercase">O que comemoramos?</label><input name="title" required placeholder="Ex: Nosso Aniversário" className="w-full bg-transparent font-bold outline-none" /></div>
                                         <div className="bg-slate-50 p-4 rounded-2xl"><label className="text-[10px] font-black text-slate-400 block mb-1 uppercase">Qual a Data?</label><input name="date" type="date" required className="w-full bg-transparent font-bold outline-none" /></div>
                                         <div className="flex gap-2">
-                                            <button type="button" onClick={()=>setDateFormIsYearly(true)} className={`flex-1 py-4 rounded-2xl font-black transition-all shadow-sm ${dateFormIsYearly?'bg-pink-500 text-white':'bg-slate-50 text-slate-400'}`}>Todo Ano ✨</button>
-                                            <button type="button" onClick={()=>setDateFormIsYearly(false)} className={`flex-1 py-4 rounded-2xl font-black transition-all shadow-sm ${!dateFormIsYearly?'bg-pink-500 text-white':'bg-slate-50 text-slate-400'}`}>Uma Vez 💖</button>
+                                            <button type="button" onClick={()=>setDateFormFrequency('monthly')} className={`flex-1 py-3 text-[10px] sm:text-xs rounded-2xl font-black transition-all shadow-sm ${dateFormFrequency==='monthly'?'bg-pink-500 text-white':'bg-slate-50 text-slate-400'}`}>Todo Mês 🗓️</button>
+                                            <button type="button" onClick={()=>setDateFormFrequency('yearly')} className={`flex-1 py-3 text-[10px] sm:text-xs rounded-2xl font-black transition-all shadow-sm ${dateFormFrequency==='yearly'?'bg-pink-500 text-white':'bg-slate-50 text-slate-400'}`}>Todo Ano ✨</button>
+                                            <button type="button" onClick={()=>setDateFormFrequency('once')} className={`flex-1 py-3 text-[10px] sm:text-xs rounded-2xl font-black transition-all shadow-sm ${dateFormFrequency==='once'?'bg-pink-500 text-white':'bg-slate-50 text-slate-400'}`}>Uma Vez 💖</button>
                                         </div>
                                         <button className="w-full bg-pink-600 text-white font-black py-4 rounded-3xl shadow-lg mt-4">Eternizar Data</button>
                                         <button type="button" onClick={()=>setIsAddDateModalOpen(false)} className="w-full text-slate-400 font-bold py-2">Cancelar</button>
