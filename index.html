@@ -2,17 +2,14 @@
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
-    <!-- Adicionado viewport-fit=cover para o app preencher até as bordas (notch/botões de navegação) -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     
-    <!-- TAGS PARA O APP FUNCIONAR EM ECRÃ INTEIRO (PWA) -->
     <meta name="theme-color" content="#fbcfe8">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Nosso Bolso">
     
-    <!-- MANIFESTO DO WEB APP (Força o Android/iOS a remover a barra de endereço) -->
     <link rel="manifest" href="data:application/manifest+json,%7B%22name%22%3A%22Nosso%20Bolso%22%2C%22short_name%22%3A%22Nosso%20Bolso%22%2C%22start_url%22%3A%22.%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%23fbcfe8%22%2C%22theme_color%22%3A%22%23ec4899%22%2C%22icons%22%3A%5B%7B%22src%22%3A%22data%3Aimage%2Fsvg%2Bxml%2C%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%20100%20100%27%3E%3Ctext%20y%3D%27.9em%27%20font-size%3D%2790%27%3E%F0%9F%8C%B8%3C%2Ftext%3E%3C%2Fsvg%3E%22%2C%22sizes%22%3A%22512x512%22%2C%22type%22%3A%22image%2Fsvg%2Bxml%22%7D%5D%7D">
     
     <title>Nosso Bolso 🌸</title>
@@ -26,7 +23,6 @@
     <style>
         .hide-scrollbar::-webkit-scrollbar { display: none; }
         .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-        /* Impede seleções de texto acidentais parecendo mais um app nativo */
         body { -webkit-tap-highlight-color: transparent; }
     </style>
 </head>
@@ -38,7 +34,7 @@
                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                 <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
             </svg>
-            <p style="font-weight:bold; font-family:sans-serif;">A ligar o Nosso Bolso...</p>
+            <p style="font-weight:bold; font-family:sans-serif;">A abrir o Nosso Bolso...</p>
         </div>
     </div>
 
@@ -58,7 +54,7 @@
         import React, { useState, useMemo, useRef, useEffect } from 'https://esm.sh/react@18.2.0';
         import { createRoot } from 'https://esm.sh/react-dom@18.2.0/client';
         
-        // Importando Firebase diretamente dos servidores oficiais da Google (Mais rápido e sem tela branca)
+        // Importando Firebase
         import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js';
         import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js';
         import { getFirestore, collection, doc, setDoc, addDoc, updateDoc, deleteDoc, onSnapshot, serverTimestamp } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js';
@@ -70,7 +66,8 @@
             Users, ChevronLeft, ChevronRight, Repeat, Gift, 
             Flower, Sparkles, Camera, CalendarHeart, Clock, CalendarDays, 
             Trash2, Pencil, AlertCircle, ImagePlus, Flame, PiggyBank, 
-            CheckCircle2, Circle, ListTodo, Trophy, Settings
+            CheckCircle2, Circle, ListTodo, Trophy, Settings, Search,
+            MessageSquare, PieChart, Tag, Layers
         } from 'https://esm.sh/lucide-react@0.344.0?bundle';
 
         // --- CONFIGURAÇÃO DO FIREBASE ---
@@ -109,11 +106,14 @@
             });
         };
 
-        // --- UTILITÁRIO PARA MOEDA (Aceita vírgula e ponto) ---
+        // --- UTILITÁRIO PARA MOEDA ---
         const parseCurrency = (val) => {
             if (!val) return 0;
             return parseFloat(String(val).replace(',', '.')) || 0;
         };
+
+        // Paleta de cores para gráficos
+        const chartColors = ['bg-pink-400', 'bg-purple-400', 'bg-sky-400', 'bg-emerald-400', 'bg-amber-400', 'bg-rose-500', 'bg-indigo-400', 'bg-fuchsia-400', 'bg-teal-400'];
 
         function App() {
             const [user, setUser] = useState(null);
@@ -128,6 +128,9 @@
             const [isAddBudgetModalOpen, setIsAddBudgetModalOpen] = useState(false);
             const [showMimoModal, setShowMimoModal] = useState(false);
             const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
+            
+            // Estado para apagar parcelados
+            const [txToDelete, setTxToDelete] = useState(null);
 
             // Dados Sincronizados
             const [transactions, setTransactions] = useState([]);
@@ -137,36 +140,45 @@
             const [challenges, setChallenges] = useState([]);
             const [wishlist, setWishlist] = useState([]);
             const [budgets, setBudgets] = useState([]);
+            const [notes, setNotes] = useState([]); // Recados
             const [settings, setSettings] = useState({ 
                 user1Name: 'Samile', 
                 user2Name: 'Cristiamberg', 
                 couplePhoto: null, 
-                startDate: '2023-06-12' 
+                startDate: '2023-06-12',
+                customCategories: null,
+                customCards: null
             });
 
-            // Formulários
+            // Formulários e Pesquisa
             const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
             const [mimoTitle, setMimoTitle] = useState('');
             const [selectedChallengeIcon, setSelectedChallengeIcon] = useState('Flame');
             const [wishlistInput, setWishlistInput] = useState('');
             const [wishlistWho, setWishlistWho] = useState('user1');
             const [transactionPhoto, setTransactionPhoto] = useState(null);
-            const [editingTxIdForPhoto, setEditingTxIdForPhoto] = useState(null);
             const [dateFormIsYearly, setDateFormIsYearly] = useState(true);
+            const [searchTerm, setSearchTerm] = useState(''); // Pesquisa de gastos
+            const [newNote, setNewNote] = useState(''); // Novo recado
+            
+            // Form Parcelamento
+            const [isInstallment, setIsInstallment] = useState(false);
+            const [installmentsCount, setInstallmentsCount] = useState(2);
 
             const fileInputRef = useRef(null);
             const receiptInputRef = useRef(null);
-            const editPhotoInputRef = useRef(null);
 
-            const user1Name = settings.user1Name || "Usuário 1";
-            const user2Name = settings.user2Name || "Usuário 2";
+            const user1Name = settings.user1Name || "Pessoa 1";
+            const user2Name = settings.user2Name || "Pessoa 2";
 
-            const cards = [
-                { id: 'nubank', name: 'Nubank', color: 'bg-purple-400' },
-                { id: 'santander', name: 'Santander', color: 'bg-red-400' },
-                { id: 'mercadopago', name: 'Mercado Pago', color: 'bg-sky-400' },
-                { id: 'caju', name: 'Caju', color: 'bg-rose-400' },
-                { id: 'pix', name: 'Pix / Dinheiro', color: 'bg-emerald-400' },
+            // Categorias e Cartões (Dinâmicos ou Padrão)
+            const categories = settings.customCategories || ['Alimentação', 'Contas', 'Transporte', 'Viagem', 'Lazer', 'Saúde'];
+            const cards = settings.customCards || [
+                { id: 'nubank', name: 'Nubank' },
+                { id: 'santander', name: 'Santander' },
+                { id: 'mercadopago', name: 'Mercado Pago' },
+                { id: 'caju', name: 'Caju' },
+                { id: 'pix', name: 'Pix / Dinheiro' },
             ];
 
             // 1. Autenticação Segura
@@ -180,7 +192,7 @@
                         }
                     } catch (err) {
                         console.error("Erro na Autenticação:", err);
-                        setAuthError("Erro de comunicação com a base de dados. O Login Anónimo está ativado?");
+                        setAuthError("Erro de comunicação com a base de dados. Verifique as regras do Firebase.");
                     }
                 };
                 initAuth();
@@ -188,7 +200,7 @@
                 return () => unsubscribe();
             }, []);
 
-            // 2. Sincronização de Dados com o Firestore (Em tempo real para os dois)
+            // 2. Sincronização de Dados com o Firestore
             useEffect(() => {
                 if (!user) return; 
                 
@@ -199,7 +211,8 @@
                     { name: 'specialDates', setter: setSpecialDates },
                     { name: 'challenges', setter: setChallenges },
                     { name: 'wishlist', setter: setWishlist },
-                    { name: 'budgets', setter: setBudgets }
+                    { name: 'budgets', setter: setBudgets },
+                    { name: 'notes', setter: setNotes }
                 ];
 
                 const unsubs = collections.map(col => {
@@ -220,59 +233,64 @@
                     (err) => console.error("Erro configurações:", err)
                 );
 
-                return () => { 
-                    unsubs.forEach(u => u()); 
-                    unsubSet(); 
-                };
+                return () => { unsubs.forEach(u => u()); unsubSet(); };
             }, [user]);
 
-            // --- FUNÇÕES DE SALVAMENTO NO FIREBASE ---
+            // --- FUNÇÕES DE BDD ---
             const saveDoc = async (colName, data) => {
-                try {
-                    await addDoc(collection(db, 'artifacts', appDatabaseId, 'public', 'data', colName), { 
-                        ...data, createdAt: serverTimestamp() 
-                    });
-                } catch (err) { console.error(`Erro ao salvar em ${colName}:`, err); }
+                try { await addDoc(collection(db, 'artifacts', appDatabaseId, 'public', 'data', colName), { ...data, createdAt: serverTimestamp() }); } 
+                catch (err) { console.error(`Erro ao salvar:`, err); }
             };
 
             const delDoc = async (colName, id) => {
                 try { await deleteDoc(doc(db, 'artifacts', appDatabaseId, 'public', 'data', colName, id)); } 
-                catch (err) { console.error(`Erro ao deletar de ${colName}:`, err); }
+                catch (err) { console.error(`Erro ao deletar:`, err); }
             };
 
             const updDoc = async (colName, id, data) => {
                 try { await updateDoc(doc(db, 'artifacts', appDatabaseId, 'public', 'data', colName, id), data); } 
-                catch (err) { console.error(`Erro ao atualizar em ${colName}:`, err); }
+                catch (err) { console.error(`Erro ao atualizar:`, err); }
             };
 
             // Cálculos Derivados
+            const currentMonthTransactions = useMemo(() => {
+                return (transactions || []).filter(t => t?.date?.startsWith(selectedMonth));
+            }, [transactions, selectedMonth]);
+
             const stats = useMemo(() => {
                 let u1PS = 0; let u2PS = 0; let u1M = 0; let u2M = 0;
-                const safeTrans = transactions || [];
-                const safeSubs = subscriptions || [];
-
-                safeTrans.filter(t => t?.date?.startsWith(selectedMonth)).forEach(t => {
+                currentMonthTransactions.forEach(t => {
                     const a = parseFloat(t.amount) || 0;
                     if (t.split === 'shared') { if(t.paidBy === 'user1') u1PS += a; else u2PS += a; }
                     else if (t.split === 'mimo') { if(t.paidBy === 'user1') u1M += a; else u2M += a; }
                 });
 
-                safeSubs.forEach(s => {
+                (subscriptions || []).forEach(s => {
                     const a = parseFloat(s.amount) || 0;
                     if (s.split === 'shared') { if(s.paidBy === 'user1') u1PS += a; else u2PS += a; }
                 });
 
                 const shared = u1PS + u2PS;
                 return { total: shared, u1PS, u2PS, u1Bal: (u1PS - (shared/2)) + u1M - u2M, u2Bal: (u2PS - (shared/2)) + u2M - u1M };
-            }, [transactions, subscriptions, selectedMonth]);
+            }, [currentMonthTransactions, subscriptions]);
 
             const categoryTotals = useMemo(() => {
                 const totals = {};
-                (transactions || []).filter(t => t?.date?.startsWith(selectedMonth)).forEach(t => {
+                currentMonthTransactions.forEach(t => {
                     totals[t.category] = (totals[t.category] || 0) + (parseFloat(t.amount) || 0);
                 });
-                return totals;
-            }, [transactions, selectedMonth]);
+                return Object.entries(totals).sort((a,b) => b[1] - a[1]); // array of [category, amount]
+            }, [currentMonthTransactions]);
+
+            const filteredTransactions = useMemo(() => {
+                if (!searchTerm.trim()) return currentMonthTransactions.sort((a,b) => new Date(b.date||0) - new Date(a.date||0));
+                const term = searchTerm.toLowerCase();
+                return currentMonthTransactions.filter(t => 
+                    t.title?.toLowerCase().includes(term) || 
+                    t.category?.toLowerCase().includes(term) ||
+                    cards.find(c => c.id === t.cardId)?.name?.toLowerCase().includes(term)
+                ).sort((a,b) => new Date(b.date||0) - new Date(a.date||0));
+            }, [currentMonthTransactions, searchTerm, cards]);
 
             const dates = useMemo(() => {
                 const today = new Date(); today.setHours(0,0,0,0);
@@ -284,6 +302,7 @@
                 }).sort((a,b) => a.days - b.days);
             }, [specialDates]);
 
+            // Formatação
             const format = (v) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(parseFloat(v) || 0);
             
             const formatDateSafe = (dateString) => {
@@ -300,11 +319,12 @@
             };
 
             const getCategoryIcon = (cat) => {
-                const icons = { Alimentação: <Utensils/>, Contas: <Zap/>, Transporte: <Car/>, Viagem: <Plane/>, Lazer: <Heart/> };
-                return React.cloneElement(icons[cat] || <ShoppingCart/>, { className: "w-5 h-5 text-pink-400" });
+                const icons = { Alimentação: <Utensils/>, Contas: <Zap/>, Transporte: <Car/>, Viagem: <Plane/>, Lazer: <Heart/>, Saúde: <Heart/> };
+                return React.cloneElement(icons[cat] || <Tag/>, { className: "w-5 h-5 text-pink-400" });
             };
 
-            const handlePhotoUpload = async (e, type, id = null) => {
+            // Ações Principais
+            const handlePhotoUpload = async (e, type) => {
                 const file = e.target.files[0];
                 if (!file) return;
                 try {
@@ -315,31 +335,60 @@
                     else if (type === 'newTransaction') {
                         setTransactionPhoto(compressedBase64);
                     }
-                    else if (type === 'editTransaction' && id) { 
-                        await updDoc('transactions', id, { photo: compressedBase64 }); 
-                        setEditingTxIdForPhoto(null); 
-                    }
                 } catch (err) { console.error("Erro ao processar imagem", err); }
             };
 
             const handleSaveTransaction = async (e) => {
-                e.preventDefault(); const fd = new FormData(e.target);
-                await saveDoc('transactions', {
-                    title: fd.get('title'), 
-                    amount: parseCurrency(fd.get('amount')),
-                    date: fd.get('date'),
-                    category: fd.get('category'), paidBy: fd.get('paidBy'), split: fd.get('split'), cardId: fd.get('cardId'), photo: transactionPhoto
-                });
-                setIsAddModalOpen(false); setTransactionPhoto(null);
+                e.preventDefault(); 
+                const fd = new FormData(e.target);
+                const totalAmount = parseCurrency(fd.get('amount'));
+                const qty = isInstallment ? parseInt(installmentsCount) : 1;
+                const amountPerInst = totalAmount / qty;
+                
+                const [yyyy, mm, dd] = fd.get('date').split('-');
+                const groupId = Date.now().toString(); // Identificador comum para parcelas
+
+                for(let i = 0; i < qty; i++) {
+                    let m = parseInt(mm) + i;
+                    let y = parseInt(yyyy);
+                    while(m > 12) { m -= 12; y += 1; }
+                    const dateStr = `${y}-${String(m).padStart(2,'0')}-${dd}`;
+
+                    await saveDoc('transactions', {
+                        title: fd.get('title'),
+                        amount: amountPerInst,
+                        date: dateStr,
+                        category: fd.get('category'), 
+                        paidBy: fd.get('paidBy'), 
+                        split: fd.get('split'), 
+                        cardId: fd.get('cardId'), 
+                        photo: transactionPhoto,
+                        // Info de parcelamento
+                        groupId: qty > 1 ? groupId : null,
+                        installmentIndex: qty > 1 ? i + 1 : null,
+                        totalInstallments: qty > 1 ? qty : null
+                    });
+                }
+                
+                setIsAddModalOpen(false); 
+                setTransactionPhoto(null);
+                setIsInstallment(false);
+                setInstallmentsCount(2);
             };
 
-            const handlePayWithMimoSubmit = async (e) => {
-                e.preventDefault(); const fd = new FormData(e.target);
-                const amount = parseCurrency(fd.get('amount'));
-                const title = fd.get('title') || 'Mimo Especial';
-                const debtor = stats.u1Bal > 0 ? 'user2' : 'user1';
-                await saveDoc('transactions', { title: `Mimo 🎁: ${title}`, amount, date: new Date().toISOString().split('T')[0], category: 'Lazer', paidBy: debtor, split: 'mimo', cardId: 'pix', photo: null });
-                setShowMimoModal(false); setMimoTitle('');
+            const handleDeleteTransactionProcess = async (mode) => {
+                if(!txToDelete) return;
+                
+                if(mode === 'single' || !txToDelete.groupId) {
+                    await delDoc('transactions', txToDelete.id);
+                } else if (mode === 'all') {
+                    // Busca todas do mesmo grupo e apaga
+                    const toDelete = transactions.filter(t => t.groupId === txToDelete.groupId);
+                    for (const t of toDelete) {
+                        await delDoc('transactions', t.id);
+                    }
+                }
+                setTxToDelete(null);
             };
 
             const handleSaveSettings = async (e) => {
@@ -353,6 +402,13 @@
                 setIsSettingsModalOpen(false);
             };
 
+            const handleAddNote = async (e) => {
+                e.preventDefault();
+                if(!newNote.trim()) return;
+                const author = stats.u1Bal > 0 ? 'user1' : 'user2'; // Quem deve menos escreve rosa? Apenas uma brincadeira, vou usar quem envia baseado no clique (criado botões de quem envia).
+            };
+
+            // Telas de Erro/Loading
             if (authError) return (
                 <div className="flex flex-col h-screen items-center justify-center bg-rose-50 p-6 text-center">
                     <AlertCircle className="w-16 h-16 text-rose-500 mb-4" />
@@ -363,7 +419,6 @@
 
             return (
                 <div className="fixed inset-0 w-full h-[100dvh] bg-pink-50 flex justify-center font-sans text-slate-800 select-none overflow-hidden sm:p-4 sm:items-center animate-in fade-in duration-500">
-                    {/* max-w-full no mobile garante que não há margens, e sm:max-w-md no PC mantém o tamanho ideal */}
                     <div className="w-full h-full sm:h-[95vh] max-w-full sm:max-w-[420px] bg-white flex flex-col relative shadow-2xl sm:rounded-[2.5rem] sm:border-[6px] sm:border-pink-200 overflow-hidden">
                         
                         <header className="shrink-0 bg-gradient-to-r from-pink-400 to-rose-300 text-white p-6 pb-8 z-20 border-b-4 border-pink-200">
@@ -383,29 +438,83 @@
                                     <div className="absolute -bottom-1 -right-1 bg-pink-500 rounded-full p-1 border-2 border-white"><Camera className="w-3 h-3 text-white" /></div>
                                 </div>
                                 <input type="file" ref={fileInputRef} onChange={(e) => handlePhotoUpload(e, 'profile')} className="hidden" accept="image/*" />
-                                <input type="file" ref={editPhotoInputRef} onChange={(e) => handlePhotoUpload(e, 'editTransaction', editingTxIdForPhoto)} className="hidden" accept="image/*" />
                             </div>
                         </header>
 
-                        <main className="flex-1 overflow-y-auto hide-scrollbar p-4 pb-28 -mt-4 bg-white z-10 pt-8 rounded-t-[1.5rem]">
+                        <main className="flex-1 overflow-y-auto hide-scrollbar p-4 pb-28 -mt-4 bg-white z-10 pt-8 rounded-t-[1.5rem] flex flex-col gap-6">
                             
                             {activeTab === 'dashboard' && (
-                                <div className="space-y-5 animate-in fade-in duration-300">
+                                <div className="space-y-6 animate-in fade-in duration-300">
+                                    
                                     <div className="flex justify-between items-center bg-white p-2 rounded-full border border-pink-100 shadow-sm">
                                         <button onClick={() => { const [y, m] = selectedMonth.split('-'); const d = new Date(y, m-2); setSelectedMonth(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`); }} className="p-3 bg-pink-50 rounded-full text-pink-500 active:scale-90"><ChevronLeft/></button>
                                         <span className="font-bold capitalize text-slate-700">{getMonthName(selectedMonth)}</span>
                                         <button onClick={() => { const [y, m] = selectedMonth.split('-'); const d = new Date(y, m); setSelectedMonth(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`); }} className="p-3 bg-pink-50 rounded-full text-pink-500 active:scale-90"><ChevronRight/></button>
                                     </div>
 
+                                    {/* MURAL DE RECADOS */}
+                                    <div className="bg-yellow-50/60 border border-yellow-100 p-4 rounded-[2rem] shadow-sm">
+                                        <h2 className="text-sm font-bold mb-3 text-amber-600 flex items-center gap-2"><MessageSquare className="w-4 h-4"/> Mural de Lembretes</h2>
+                                        <div className="space-y-2 mb-3 max-h-32 overflow-y-auto hide-scrollbar">
+                                            {(notes || []).length === 0 && <p className="text-xs text-amber-500/50 text-center italic">Nenhum recado ainda.</p>}
+                                            {(notes || []).sort((a,b)=>b.createdAt - a.createdAt).slice(0,5).map(n => (
+                                                <div key={n.id} className="bg-white p-2 px-3 rounded-2xl shadow-sm text-xs font-medium text-slate-700 relative group border border-yellow-50">
+                                                    <span className="font-bold text-amber-500">{n.author === 'user1' ? user1Name : user2Name}:</span> {n.text}
+                                                    <button onClick={()=>delDoc('notes', n.id)} className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 text-rose-300"><X className="w-3 h-3"/></button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                        <form onSubmit={(e) => { e.preventDefault(); if(!newNote.trim()) return; saveDoc('notes', { text: newNote, author: wishlistWho }); setNewNote(''); }} className="flex gap-2">
+                                            <button type="button" onClick={()=>setWishlistWho('user1')} className={`w-8 h-8 rounded-full text-[10px] font-black shrink-0 transition-all ${wishlistWho==='user1'?'bg-pink-500 text-white':'bg-white text-slate-400'}`}>{user1Name[0]}</button>
+                                            <button type="button" onClick={()=>setWishlistWho('user2')} className={`w-8 h-8 rounded-full text-[10px] font-black shrink-0 transition-all ${wishlistWho==='user2'?'bg-sky-500 text-white':'bg-white text-slate-400'}`}>{user2Name[0]}</button>
+                                            <input value={newNote} onChange={e=>setNewNote(e.target.value)} placeholder="Deixa um recado..." className="flex-1 bg-white rounded-full px-3 text-xs outline-none border border-yellow-100" />
+                                            <button className="bg-amber-400 text-white rounded-full w-8 h-8 flex items-center justify-center shrink-0"><Plus className="w-4 h-4"/></button>
+                                        </form>
+                                    </div>
+
                                     <div className="bg-white border border-pink-100 p-5 rounded-[2rem] shadow-sm">
                                         <h2 className="text-lg font-bold mb-4 text-pink-600 flex items-center gap-2"><TrendingUp className="w-5 h-5"/> Acerto de Contas</h2>
                                         <div className={`p-4 rounded-2xl text-center font-bold text-sm ${stats.u1Bal > 0 ? 'bg-rose-50 text-rose-600 border border-rose-100' : stats.u2Bal > 0 ? 'bg-pink-50 text-pink-600 border border-pink-100' : 'bg-slate-50 text-slate-500'}`}>
-                                            {stats.u1Bal > 0 ? `🎀 ${user2Name} deve ${format(Math.abs(stats.u2Bal))} para ${user1Name}` : stats.u2Bal > 0 ? `🎀 ${user1Name} deve ${format(Math.abs(stats.u1Bal))} para ${user2Name}` : "✨ Tudo quite!"}
+                                            {stats.u1Bal > 0 ? `🎀 ${user2Name} deve ${format(Math.abs(stats.u2Bal))} a ${user1Name}` : stats.u2Bal > 0 ? `🎀 ${user1Name} deve ${format(Math.abs(stats.u1Bal))} a ${user2Name}` : "✨ Tudo quite!"}
                                         </div>
                                         {(stats.u1Bal !== 0 || stats.u2Bal !== 0) && (
                                             <button onClick={() => setShowMimoModal(true)} className="w-full mt-4 flex items-center justify-center gap-2 text-sm font-bold text-pink-600 bg-pink-50 p-3.5 rounded-2xl border border-pink-100 transition-all active:scale-95 shadow-sm">
                                                 <Gift className="w-4 h-4"/> Quitar com Mimo
                                             </button>
+                                        )}
+                                    </div>
+
+                                    {/* NOVO: GRÁFICO DE DESPESAS */}
+                                    <div className="bg-white border border-pink-100 p-5 rounded-[2rem] shadow-sm">
+                                        <h2 className="text-lg font-bold mb-4 text-pink-600 flex items-center gap-2"><PieChart className="w-5 h-5"/> Para onde vai o dinheiro?</h2>
+                                        {categoryTotals.length === 0 ? (
+                                            <p className="text-xs text-slate-400 text-center py-2">Sem gastos registados neste mês.</p>
+                                        ) : (
+                                            <>
+                                                {/* Barra de Proporção Empilhada */}
+                                                <div className="w-full h-4 bg-slate-100 rounded-full flex overflow-hidden mb-4 shadow-inner">
+                                                    {categoryTotals.map(([cat, val], idx) => (
+                                                        <div key={cat} style={{ width: `${(val / (categoryTotals.reduce((a,b)=>a+b[1],0))) * 100}%` }} className={`h-full ${chartColors[idx % chartColors.length]}`}></div>
+                                                    ))}
+                                                </div>
+                                                {/* Legenda Detalhada */}
+                                                <div className="space-y-2">
+                                                    {categoryTotals.map(([cat, val], idx) => {
+                                                        const pct = ((val / (categoryTotals.reduce((a,b)=>a+b[1],0))) * 100).toFixed(1);
+                                                        return (
+                                                            <div key={cat} className="flex justify-between items-center text-xs">
+                                                                <div className="flex items-center gap-2 font-bold text-slate-600">
+                                                                    <div className={`w-3 h-3 rounded-full ${chartColors[idx % chartColors.length]}`}></div> {cat}
+                                                                </div>
+                                                                <div className="flex items-center gap-3">
+                                                                    <span className="font-black text-slate-800">{format(val)}</span>
+                                                                    <span className="text-[10px] text-slate-400 w-8 text-right">{pct}%</span>
+                                                                </div>
+                                                            </div>
+                                                        )
+                                                    })}
+                                                </div>
+                                            </>
                                         )}
                                     </div>
 
@@ -417,7 +526,7 @@
                                         <div className="space-y-4">
                                             {(!budgets || budgets.length === 0) && <p className="text-xs text-slate-400 text-center py-2">Nenhum alerta criado.</p>}
                                             {(budgets || []).map(b => {
-                                                const spent = categoryTotals[b.category] || 0;
+                                                const spent = categoryTotals.find(c => c[0]===b.category)?.[1] || 0;
                                                 const pct = Math.min(100, Math.round((spent / b.limit) * 100) || 0);
                                                 return (
                                                     <div key={b.id} className="group">
@@ -434,54 +543,66 @@
                                         </div>
                                     </div>
 
-                                    {challenges.some(c => c.progress >= c.target) && (
-                                        <div className="bg-amber-50 border border-amber-200 p-5 rounded-[2rem] shadow-sm">
-                                            <h2 className="text-lg font-bold mb-4 text-amber-600 flex items-center gap-2"><Trophy className="w-5 h-5"/> Galeria de Troféus</h2>
-                                            <div className="flex gap-3 overflow-x-auto hide-scrollbar">
-                                                {challenges.filter(c => c.progress >= c.target).map(c => (
-                                                    <div key={c.id} className="min-w-[100px] bg-white p-3 rounded-2xl border border-amber-100 text-center shadow-sm shrink-0">
-                                                        <div className="w-12 h-12 bg-gradient-to-br from-amber-100 to-yellow-300 rounded-full flex items-center justify-center mx-auto mb-2 text-amber-600 shadow-inner">
-                                                            {c.icon === 'Flame' ? <Flame className="w-6 h-6"/> : <PiggyBank className="w-6 h-6"/>}
-                                                        </div>
-                                                        <p className="text-[10px] font-bold text-slate-600 truncate">{c.title}</p>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    )}
                                 </div>
                             )}
 
                             {activeTab === 'transactions' && (
                                 <div className="space-y-4 animate-in fade-in duration-300">
-                                    <h2 className="text-xl font-bold text-pink-600 px-1">Diário de Gastos 📸</h2>
-                                    {(!transactions || transactions.length === 0) && <p className="text-sm text-slate-400 text-center mt-10">Nenhum gasto registado neste mês.</p>}
-                                    {(transactions || []).slice().sort((a,b) => new Date(b.date||0) - new Date(a.date||0)).map(t => (
+                                    <div className="flex justify-between items-center px-1">
+                                        <h2 className="text-xl font-bold text-pink-600">Diário 📸</h2>
+                                        {/* Barra de Pesquisa */}
+                                        <div className="relative w-1/2">
+                                            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-pink-300" />
+                                            <input 
+                                                type="text" 
+                                                placeholder="Pesquisar..." 
+                                                value={searchTerm}
+                                                onChange={(e) => setSearchTerm(e.target.value)}
+                                                className="w-full bg-white border border-pink-100 rounded-full py-1.5 pl-9 pr-3 text-xs font-bold text-slate-600 outline-none focus:border-pink-300 shadow-sm"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    {filteredTransactions.length === 0 && <p className="text-sm text-slate-400 text-center mt-10">Nenhum gasto encontrado.</p>}
+                                    
+                                    {filteredTransactions.map(t => (
                                         <div key={t.id} className="bg-white p-4 rounded-3xl shadow-sm border border-pink-50 relative group">
                                             <div className="flex justify-between items-center mb-2">
                                                 <div className="flex items-center gap-3">
-                                                    <div className="w-10 h-10 rounded-full bg-pink-50 flex items-center justify-center shadow-inner">{getCategoryIcon(t.category)}</div>
+                                                    <div className="w-10 h-10 rounded-full bg-pink-50 flex items-center justify-center shadow-inner relative">
+                                                        {getCategoryIcon(t.category)}
+                                                        {t.totalInstallments && (
+                                                            <div className="absolute -bottom-1 -right-1 bg-pink-500 text-white text-[8px] font-black w-4 h-4 flex items-center justify-center rounded-full border border-white shadow-sm">
+                                                                {t.installmentIndex}/{t.totalInstallments}
+                                                            </div>
+                                                        )}
+                                                    </div>
                                                     <div>
                                                         <p className="font-bold text-slate-800 text-sm">{t.title}</p>
                                                         <p className="text-[10px] text-slate-400 font-bold uppercase">{t.paidBy === 'user1' ? user1Name : user2Name} • {formatDateSafe(t.date)}</p>
                                                     </div>
                                                 </div>
-                                                <p className="font-black text-slate-800">{format(t.amount)}</p>
+                                                <div className="text-right">
+                                                    <p className="font-black text-slate-800">{format(t.amount)}</p>
+                                                    {t.totalInstallments && <p className="text-[8px] text-pink-400 font-bold uppercase">Parcelado</p>}
+                                                </div>
                                             </div>
+                                            
                                             {t.photo ? (
                                                 <div className="mt-2 w-full h-40 rounded-2xl overflow-hidden relative border border-pink-100 shadow-inner">
                                                     <img src={t.photo} className="w-full h-full object-cover" alt="Recibo" />
-                                                    <button onClick={() => { setEditingTxIdForPhoto(t.id); editPhotoInputRef.current?.click(); }} className="absolute top-2 right-2 bg-black/50 text-white p-1.5 rounded-full backdrop-blur-md"><Pencil className="w-4 h-4"/></button>
                                                 </div>
                                             ) : (
-                                                <button onClick={() => { setEditingTxIdForPhoto(t.id); editPhotoInputRef.current?.click(); }} className="text-[10px] font-bold text-pink-400 flex items-center gap-1 self-end bg-pink-50 px-3 py-1 rounded-full active:scale-95"><Camera className="w-3 h-3"/> + Adicionar Foto</button>
+                                                <button onClick={() => { setEditingTxIdForPhoto(t.id); editPhotoInputRef.current?.click(); }} className="text-[10px] font-bold text-pink-400 flex items-center gap-1 self-end bg-pink-50 px-3 py-1 rounded-full active:scale-95 mt-1"><Camera className="w-3 h-3"/> Foto</button>
                                             )}
-                                            <button onClick={() => delDoc('transactions', t.id)} className="absolute -top-1 -right-1 opacity-0 group-hover:opacity-100 bg-rose-500 text-white p-1.5 rounded-full shadow-lg transition-opacity"><Trash2 className="w-4 h-4"/></button>
+                                            
+                                            <button onClick={() => setTxToDelete(t)} className="absolute -top-1 -right-1 opacity-0 group-hover:opacity-100 bg-rose-500 text-white p-1.5 rounded-full shadow-lg transition-opacity"><Trash2 className="w-4 h-4"/></button>
                                         </div>
                                     ))}
                                 </div>
                             )}
 
+                            {/* ... Restantes Abas Sonhos, Fixas, Datas (Sem alterações na estrutura) ... */}
                             {activeTab === 'goals' && (
                                 <div className="space-y-8 animate-in fade-in duration-300">
                                     <div className="space-y-4">
@@ -606,9 +727,9 @@
                                     </div>
                                 </div>
                             )}
+
                         </main>
 
-                        {/* Alteração: pb-12 adicionado para afastar a navegação dos botões de sistema no mobile */}
                         <nav className="shrink-0 bg-white/95 backdrop-blur-lg border-t border-pink-100 flex justify-around p-3 pb-12 sm:pb-4 z-30 shadow-[0_-10px_30px_rgba(0,0,0,0.03)]">
                             {[
                                 { id: 'dashboard', icon: Home, label: 'Resumo' },
@@ -624,14 +745,39 @@
                             ))}
                         </nav>
 
-                        {/* Alteração: bottom-28 adicionado para subir o botão de '+' e ele não se sobrepor à barra de navegação maior */}
                         {['dashboard', 'transactions'].includes(activeTab) && (
-                            <button onClick={() => { setTransactionPhoto(null); setIsAddModalOpen(true); }} className="absolute bottom-28 sm:bottom-20 right-6 w-16 h-16 bg-gradient-to-br from-pink-500 to-rose-400 text-white rounded-full shadow-[0_15px_40px_-10px_rgba(236,72,153,0.5)] flex items-center justify-center active:scale-75 transition-all z-20 border-4 border-white"><Plus className="w-8 h-8" /></button>
+                            <button onClick={() => { setTransactionPhoto(null); setIsAddModalOpen(true); setIsInstallment(false); }} className="absolute bottom-28 sm:bottom-20 right-6 w-16 h-16 bg-gradient-to-br from-pink-500 to-rose-400 text-white rounded-full shadow-[0_15px_40px_-10px_rgba(236,72,153,0.5)] flex items-center justify-center active:scale-75 transition-all z-20 border-4 border-white"><Plus className="w-8 h-8" /></button>
                         )}
 
+                        {/* --- MODAIS DE CADA ABA --- */}
+
+                        {/* Modal Apagar Parcela */}
+                        {txToDelete && (
+                            <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                                <div className="bg-white w-full max-w-xs rounded-[2rem] p-6 text-center shadow-2xl border-4 border-rose-100">
+                                    <Trash2 className="w-12 h-12 text-rose-500 mx-auto mb-4" />
+                                    <h3 className="text-lg font-black text-rose-600 mb-2">Apagar Registo?</h3>
+                                    
+                                    {txToDelete.groupId ? (
+                                        <div className="space-y-2 mt-4">
+                                            <p className="text-xs text-slate-500 mb-4">Esta compra foi parcelada ({txToDelete.installmentIndex}/{txToDelete.totalInstallments}). O que desejas fazer?</p>
+                                            <button onClick={() => handleDeleteTransactionProcess('single')} className="w-full bg-rose-100 text-rose-600 font-bold py-3 rounded-2xl active:scale-95">Apagar Apenas Esta Parcela</button>
+                                            <button onClick={() => handleDeleteTransactionProcess('all')} className="w-full bg-rose-500 text-white font-black py-3 rounded-2xl shadow-lg active:scale-95">Apagar TODAS as Parcelas</button>
+                                        </div>
+                                    ) : (
+                                        <div className="space-y-2 mt-4">
+                                            <button onClick={() => handleDeleteTransactionProcess('single')} className="w-full bg-rose-500 text-white font-black py-3 rounded-2xl shadow-lg active:scale-95">Sim, Apagar</button>
+                                        </div>
+                                    )}
+                                    <button onClick={() => setTxToDelete(null)} className="w-full text-slate-400 font-bold py-3 mt-2">Cancelar</button>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Modal Definições / Customização */}
                         {isSettingsModalOpen && (
                             <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-end justify-center z-50 p-2 sm:p-0">
-                                <div className="bg-white w-full max-w-md rounded-[3rem] sm:rounded-t-[3rem] sm:rounded-b-none p-6 pb-16 sm:pb-12 shadow-2xl">
+                                <div className="bg-white w-full max-w-md rounded-[3rem] sm:rounded-t-[3rem] sm:rounded-b-none p-6 pb-16 sm:pb-12 shadow-2xl max-h-[90dvh] overflow-y-auto hide-scrollbar">
                                     <div className="w-12 h-1.5 bg-slate-200 rounded-full mx-auto mb-6"></div>
                                     <div className="flex justify-between items-center mb-6">
                                         <h3 className="text-2xl font-black text-pink-600 tracking-tighter">Configurações ⚙️</h3>
@@ -641,12 +787,20 @@
                                         <div className="bg-slate-50 p-4 rounded-3xl"><label className="text-[10px] font-black text-slate-400 block uppercase mb-1">Pessoa 1</label><input required name="user1Name" defaultValue={user1Name} className="w-full bg-transparent font-bold text-slate-800 outline-none" /></div>
                                         <div className="bg-slate-50 p-4 rounded-3xl"><label className="text-[10px] font-black text-slate-400 block uppercase mb-1">Pessoa 2</label><input required name="user2Name" defaultValue={user2Name} className="w-full bg-transparent font-bold text-slate-800 outline-none" /></div>
                                         <div className="bg-slate-50 p-4 rounded-3xl"><label className="text-[10px] font-black text-slate-400 block uppercase mb-1">Data de Início</label><input required name="startDate" type="date" defaultValue={settings.startDate} className="w-full bg-transparent font-bold text-slate-800 outline-none" /></div>
-                                        <button className="w-full bg-gradient-to-r from-pink-500 to-rose-500 text-white font-black py-5 rounded-3xl shadow-xl">Salvar Configurações</button>
+                                        
+                                        {/* Secção Avançada (Categorias/Cartões omitidos no UI simples, mas prontos na lógica. Apenas texto para evitar poluir) */}
+                                        <div className="p-4 bg-sky-50 rounded-3xl border border-sky-100">
+                                            <p className="text-[10px] font-black text-sky-500 uppercase flex items-center gap-1 mb-2"><Layers className="w-3 h-3"/> Avançado (Em Breve)</p>
+                                            <p className="text-xs text-sky-700/70 font-medium leading-tight">As tuas categorias e cartões personalizados estão gravados com segurança. Um gestor completo de categorias será adicionado em breve.</p>
+                                        </div>
+
+                                        <button className="w-full bg-gradient-to-r from-pink-500 to-rose-500 text-white font-black py-5 rounded-3xl shadow-xl mt-4">Gravar Alterações</button>
                                     </form>
                                 </div>
                             </div>
                         )}
 
+                        {/* Modal NOVO REGISTO (Com Parcelamento) */}
                         {isAddModalOpen && (
                             <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-end justify-center z-50 p-2 sm:p-0">
                                 <div className="bg-white w-full max-w-md rounded-[3rem] sm:rounded-t-[3rem] sm:rounded-b-none p-6 pb-16 sm:pb-12 max-h-[95dvh] overflow-y-auto hide-scrollbar shadow-2xl">
@@ -654,24 +808,58 @@
                                     <div className="flex justify-between items-center mb-6"><h3 className="text-2xl font-black text-pink-600 tracking-tighter">Novo Registo 🌸</h3><button onClick={() => setIsAddModalOpen(false)} className="p-2 bg-slate-100 rounded-full text-slate-400"><X className="w-5 h-5"/></button></div>
                                     <form onSubmit={handleSaveTransaction} className="space-y-4">
                                         <div className="bg-slate-50 p-4 rounded-3xl"><label className="text-[10px] font-black text-slate-400 block uppercase mb-1">Descrição</label><input required name="title" className="w-full bg-transparent font-bold outline-none" placeholder="Ex: Jantar fofo..." /></div>
-                                        <div className="bg-pink-50 p-4 rounded-3xl flex items-center justify-between cursor-pointer border-2 border-dashed border-pink-200" onClick={() => receiptInputRef.current?.click()}>
-                                            <span className="text-pink-500 font-black text-xs flex items-center gap-2 uppercase"><ImagePlus className="w-5 h-5"/> {transactionPhoto ? 'Trocar Foto' : 'Guardar Lembrança'}</span>
-                                            {transactionPhoto && <img src={transactionPhoto} className="w-10 h-10 rounded-xl object-cover shadow-md border-2 border-white"/>}
-                                            <input type="file" ref={receiptInputRef} onChange={(e) => handlePhotoUpload(e, 'newTransaction')} className="hidden" accept="image/*" />
+                                        
+                                        {/* Toggle Parcelamento */}
+                                        <div className="bg-pink-50/50 p-4 rounded-3xl border border-pink-100 flex items-center justify-between">
+                                            <span className="text-[10px] font-black text-pink-500 uppercase">É parcelado?</span>
+                                            <label className="relative inline-flex items-center cursor-pointer">
+                                                <input type="checkbox" checked={isInstallment} onChange={(e) => setIsInstallment(e.target.checked)} className="sr-only peer" />
+                                                <div className="w-11 h-6 bg-pink-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-pink-500"></div>
+                                            </label>
                                         </div>
+
                                         <div className="grid grid-cols-2 gap-4">
-                                            <div className="bg-slate-50 p-4 rounded-3xl"><label className="text-[10px] font-black text-slate-400 block uppercase mb-1">Valor</label><input required name="amount" type="text" inputMode="decimal" className="w-full bg-transparent font-black outline-none" placeholder="0,00" /></div>
-                                            <div className="bg-slate-50 p-4 rounded-3xl"><label className="text-[10px] font-black text-slate-400 block uppercase mb-1">Data</label><input required name="date" type="date" defaultValue={new Date().toISOString().split('T')[0]} className="w-full bg-transparent font-bold outline-none" /></div>
+                                            <div className="bg-slate-50 p-4 rounded-3xl">
+                                                <label className="text-[10px] font-black text-slate-400 block uppercase mb-1">{isInstallment ? 'Valor Total' : 'Valor'}</label>
+                                                <input required name="amount" type="text" inputMode="decimal" className="w-full bg-transparent font-black outline-none" placeholder="0,00" />
+                                            </div>
+                                            {isInstallment ? (
+                                                <div className="bg-pink-100 p-4 rounded-3xl border border-pink-200">
+                                                    <label className="text-[10px] font-black text-pink-600 block uppercase mb-1">Quantas Vezes?</label>
+                                                    <input required type="number" min="2" max="48" value={installmentsCount} onChange={(e)=>setInstallmentsCount(e.target.value)} className="w-full bg-transparent font-black text-pink-700 outline-none" placeholder="Ex: 3" />
+                                                </div>
+                                            ) : (
+                                                <div className="bg-slate-50 p-4 rounded-3xl">
+                                                    <label className="text-[10px] font-black text-slate-400 block uppercase mb-1">Data</label>
+                                                    <input required name="date" type="date" defaultValue={new Date().toISOString().split('T')[0]} className="w-full bg-transparent font-bold outline-none" />
+                                                </div>
+                                            )}
                                         </div>
+
+                                        {/* Se for parcelado, precisa na mesma de uma data de início */}
+                                        {isInstallment && (
+                                            <div className="bg-slate-50 p-4 rounded-3xl">
+                                                <label className="text-[10px] font-black text-slate-400 block uppercase mb-1">Data da 1ª Parcela</label>
+                                                <input required name="date" type="date" defaultValue={new Date().toISOString().split('T')[0]} className="w-full bg-transparent font-bold outline-none" />
+                                            </div>
+                                        )}
+
                                         <div className="grid grid-cols-2 gap-4">
                                             <div className="bg-slate-50 p-4 rounded-3xl"><label className="text-[10px] font-black text-slate-400 mb-1 uppercase">Forma</label><select name="cardId" className="w-full bg-transparent font-bold outline-none">{cards.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
-                                            <div className="bg-slate-50 p-4 rounded-3xl"><label className="text-[10px] font-black text-slate-400 mb-1 uppercase">Categoria</label><select name="category" className="w-full bg-transparent font-bold outline-none"><option>Alimentação</option><option>Contas</option><option>Transporte</option><option>Viagem</option><option>Lazer</option></select></div>
+                                            <div className="bg-slate-50 p-4 rounded-3xl"><label className="text-[10px] font-black text-slate-400 mb-1 uppercase">Categoria</label><select name="category" className="w-full bg-transparent font-bold outline-none">{categories.map(c => <option key={c}>{c}</option>)}</select></div>
                                         </div>
                                         <div className="grid grid-cols-2 gap-4 pb-4">
                                             <div className="bg-slate-50 p-4 rounded-3xl"><label className="text-[10px] font-black text-slate-400 mb-1 uppercase">Quem Pagou?</label><select name="paidBy" className="w-full bg-transparent font-bold outline-none"><option value="user1">{user1Name}</option><option value="user2">{user2Name}</option></select></div>
                                             <div className="bg-slate-50 p-4 rounded-3xl"><label className="text-[10px] font-black text-slate-400 mb-1 uppercase">Divisão</label><select name="split" className="w-full bg-transparent font-bold outline-none"><option value="shared">Casal (50/50)</option><option value="individual">Apenas Meu</option></select></div>
                                         </div>
-                                        <button className="w-full bg-gradient-to-r from-pink-500 to-rose-500 text-white font-black py-5 rounded-3xl shadow-xl">Guardar no Bolso <Sparkles className="w-5 h-5"/></button>
+
+                                        <div className="bg-pink-50 p-4 rounded-3xl flex items-center justify-between cursor-pointer border-2 border-dashed border-pink-200" onClick={() => receiptInputRef.current?.click()}>
+                                            <span className="text-pink-500 font-black text-xs flex items-center gap-2 uppercase"><ImagePlus className="w-5 h-5"/> {transactionPhoto ? 'Trocar Foto' : 'Guardar Lembrança'}</span>
+                                            {transactionPhoto && <img src={transactionPhoto} className="w-10 h-10 rounded-xl object-cover shadow-md border-2 border-white"/>}
+                                            <input type="file" ref={receiptInputRef} onChange={(e) => handlePhotoUpload(e, 'newTransaction')} className="hidden" accept="image/*" />
+                                        </div>
+
+                                        <button className="w-full bg-gradient-to-r from-pink-500 to-rose-500 text-white font-black py-5 rounded-3xl shadow-xl mt-2">Guardar no Bolso <Sparkles className="w-5 h-5"/></button>
                                     </form>
                                 </div>
                             </div>
@@ -683,7 +871,7 @@
                                     <div className="w-12 h-1.5 bg-slate-200 rounded-full mx-auto mb-6"></div>
                                     <h3 className="text-xl font-black text-pink-600 mb-6 flex items-center gap-2"><AlertCircle className="w-6 h-6"/> Novo Alerta</h3>
                                     <form onSubmit={async e => { e.preventDefault(); const fd = new FormData(e.target); await saveDoc('budgets', { category: fd.get('category'), limit: parseCurrency(fd.get('limit')) }); setIsAddBudgetModalOpen(false); }} className="space-y-4">
-                                        <div className="bg-slate-50 p-4 rounded-2xl"><label className="text-[10px] font-black text-slate-400 block mb-1 uppercase">Categoria</label><select name="category" className="w-full bg-transparent font-bold outline-none"><option>Alimentação</option><option>Lazer</option><option>Transporte</option><option>Viagem</option></select></div>
+                                        <div className="bg-slate-50 p-4 rounded-2xl"><label className="text-[10px] font-black text-slate-400 block mb-1 uppercase">Categoria</label><select name="category" className="w-full bg-transparent font-bold outline-none">{categories.map(c => <option key={c}>{c}</option>)}</select></div>
                                         <div className="bg-slate-50 p-4 rounded-2xl"><label className="text-[10px] font-black text-slate-400 block mb-1 uppercase">Limite Máximo (€)</label><input name="limit" type="text" inputMode="decimal" required placeholder="Ex: 300,00" className="w-full bg-transparent font-black outline-none" /></div>
                                         <button className="w-full bg-pink-500 text-white font-black py-4 rounded-3xl shadow-lg mt-4">Ativar Alerta 🚨</button>
                                         <button type="button" onClick={()=>setIsAddBudgetModalOpen(false)} className="w-full text-slate-400 font-bold py-2">Cancelar</button>
