@@ -197,6 +197,7 @@
 
             const fileInputRef = useRef(null);
             const receiptInputRef = useRef(null);
+            const editPhotoInputRef = useRef(null);
 
             const user1Name = settings.user1Name || "Pessoa 1";
             const user2Name = settings.user2Name || "Pessoa 2";
@@ -374,19 +375,19 @@
             const upcomingDates = useMemo(() => dates.filter(d => d.days <= 7 && d.days > 0), [dates]);
 
             // Formatação e Exportação
-            const format = (v) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(parseFloat(v) || 0);
+            const format = (v) => new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(parseFloat(v) || 0);
             
             const formatDateSafe = (dateString) => {
                 if (!dateString) return '';
                 const d = new Date(dateString);
-                return isNaN(d) ? '' : d.toLocaleDateString('pt-BR', {timeZone: 'UTC'});
+                return isNaN(d) ? '' : d.toLocaleDateString('pt-PT', {timeZone: 'UTC'});
             };
 
             const getMonthName = (yyyyMM) => {
                 if (!yyyyMM) return '';
                 const [y, m] = yyyyMM.split('-');
                 const d = new Date(y, m - 1, 1);
-                return d.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+                return d.toLocaleDateString('pt-PT', { month: 'long', year: 'numeric' });
             };
 
             const getCategoryIcon = (cat) => {
@@ -395,7 +396,7 @@
             };
 
             const exportToCSV = () => {
-                const rows = [['Data', 'Descrição', 'Categoria', 'Valor (R$)', 'Pago Por', 'Divisão', 'Forma']];
+                const rows = [['Data', 'Descrição', 'Categoria', 'Valor', 'Pago Por', 'Divisão', 'Forma']];
                 filteredTransactions.forEach(t => {
                     const payer = t.paidBy === 'user1' ? user1Name : user2Name;
                     const split = t.split === 'shared' ? 'Casal' : (t.split === 'mimo' ? 'Mimo' : 'Individual');
@@ -480,6 +481,78 @@
                 setTransactionPhoto(null);
                 setIsInstallment(false);
                 setInstallmentsCount(2);
+            };
+
+            const handleSaveSubscription = async (e) => {
+                e.preventDefault();
+                const fd = new FormData(e.target);
+                const data = {
+                    name: fd.get('name'),
+                    amount: parseCurrency(fd.get('amount')),
+                    startMonth: fd.get('startMonth'),
+                    endMonth: fd.get('endMonth') || null,
+                    paidBy: fd.get('paidBy'),
+                    split: fd.get('split')
+                };
+                if (editingSub) {
+                    await updDoc('subscriptions', editingSub.id, data);
+                } else {
+                    await saveDoc('subscriptions', data);
+                }
+                setIsAddSubModalOpen(false);
+                setEditingSub(null);
+            };
+
+            const handleSaveSettings = async (e) => {
+                e.preventDefault();
+                const fd = new FormData(e.target);
+                const newSettings = {
+                    ...settings,
+                    user1Name: fd.get('user1Name') || 'Pessoa 1',
+                    user2Name: fd.get('user2Name') || 'Pessoa 2',
+                    startDate: fd.get('startDate')
+                };
+                setSettings(newSettings);
+                await setDoc(doc(db, 'artifacts', appDatabaseId, 'public', 'data', 'settings', 'profile'), newSettings, {merge: true});
+                setIsSettingsModalOpen(false);
+            };
+
+            const handleDeleteTransactionProcess = async (mode) => {
+                if (!txToDelete) return;
+                if (mode === 'single' || !txToDelete.groupId) {
+                    await delDoc('transactions', txToDelete.id);
+                } else if (mode === 'all') {
+                    const relatedTxs = transactions.filter(t => t.groupId === txToDelete.groupId);
+                    for (const t of relatedTxs) {
+                        await delDoc('transactions', t.id);
+                    }
+                }
+                setTxToDelete(null);
+            };
+
+            const handlePayWithMimoSubmit = async (e) => {
+                e.preventDefault();
+                const fd = new FormData(e.target);
+                const amount = parseCurrency(fd.get('amount'));
+                const dateStr = new Date().toISOString().split('T')[0];
+                
+                // Payer is the one who has a positive balance (meaning the other owes them, so they receive the mimo)
+                // Actually, if U1 is positive (U2 owes U1), U2 should pay the Mimo to reduce the debt.
+                let payer = stats.u1Bal > 0 ? 'user2' : 'user1';
+
+                await saveDoc('transactions', {
+                    title: mimoTitle,
+                    amount: amount,
+                    date: dateStr,
+                    category: 'Lazer', 
+                    paidBy: payer,
+                    split: 'mimo',
+                    cardId: cards.length > 0 ? cards[0].id : 'pix',
+                    photo: null
+                });
+
+                setShowMimoModal(false);
+                setMimoTitle('');
             };
 
             const handleManageCategories = async (action, item, type) => {
