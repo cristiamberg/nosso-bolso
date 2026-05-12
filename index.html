@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="pt-PT">
+<html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
@@ -374,20 +374,20 @@
 
             const upcomingDates = useMemo(() => dates.filter(d => d.days <= 7 && d.days > 0), [dates]);
 
-            // Formatação e Exportação
-            const format = (v) => new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(parseFloat(v) || 0);
+            // Formatação e Exportação (MUDADO PARA pt-BR e BRL)
+            const format = (v) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(parseFloat(v) || 0);
             
             const formatDateSafe = (dateString) => {
                 if (!dateString) return '';
                 const d = new Date(dateString);
-                return isNaN(d) ? '' : d.toLocaleDateString('pt-PT', {timeZone: 'UTC'});
+                return isNaN(d) ? '' : d.toLocaleDateString('pt-BR', {timeZone: 'UTC'});
             };
 
             const getMonthName = (yyyyMM) => {
                 if (!yyyyMM) return '';
                 const [y, m] = yyyyMM.split('-');
                 const d = new Date(y, m - 1, 1);
-                return d.toLocaleDateString('pt-PT', { month: 'long', year: 'numeric' });
+                return d.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
             };
 
             const getCategoryIcon = (cat) => {
@@ -1223,7 +1223,7 @@
                                     <h3 className="text-xl font-black text-pink-600 dark:text-pink-400 mb-6 flex items-center gap-2"><AlertCircle className="w-6 h-6"/> Novo Alerta</h3>
                                     <form onSubmit={async e => { e.preventDefault(); const fd = new FormData(e.target); await saveDoc('budgets', { category: fd.get('category'), limit: parseCurrency(fd.get('limit')) }); setIsAddBudgetModalOpen(false); }} className="space-y-4">
                                         <div className="bg-slate-50 dark:bg-slate-700 p-4 rounded-2xl"><label className="text-[10px] font-black text-slate-400 block mb-1 uppercase">Categoria</label><select name="category" className="w-full bg-transparent dark:text-white font-bold outline-none">{categories.map(c => <option key={c}>{c}</option>)}</select></div>
-                                        <div className="bg-slate-50 dark:bg-slate-700 p-4 rounded-2xl"><label className="text-[10px] font-black text-slate-400 block mb-1 uppercase">Limite Máximo (€)</label><input name="limit" type="text" inputMode="decimal" required placeholder="Ex: 300,00" className="w-full bg-transparent dark:text-white font-black outline-none" /></div>
+                                        <div className="bg-slate-50 dark:bg-slate-700 p-4 rounded-2xl"><label className="text-[10px] font-black text-slate-400 block mb-1 uppercase">Limite Máximo (R$)</label><input name="limit" type="text" inputMode="decimal" required placeholder="Ex: 300,00" className="w-full bg-transparent dark:text-white font-black outline-none" /></div>
                                         <button className="w-full bg-pink-500 dark:bg-indigo-500 text-white font-black py-4 rounded-3xl shadow-lg mt-4">Ativar Alerta 🚨</button>
                                         <button type="button" onClick={()=>setIsAddBudgetModalOpen(false)} className="w-full text-slate-400 dark:text-slate-500 font-bold py-2">Cancelar</button>
                                     </form>
