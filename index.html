@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="description" content="Nosso Bolso - Gestão Financeira para Casais">
     
     <meta name="theme-color" content="#fbcfe8">
     <meta name="mobile-web-app-capable" content="yes">
@@ -10,12 +11,13 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Nosso Bolso">
     
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌸</text></svg>">
     <link rel="manifest" href="data:application/manifest+json,%7B%22name%22%3A%22Nosso%20Bolso%22%2C%22short_name%22%3A%22Nosso%20Bolso%22%2C%22start_url%22%3A%22.%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%23fbcfe8%22%2C%22theme_color%22%3A%22%23ec4899%22%2C%22icons%22%3A%5B%7B%22src%22%3A%22data%3Aimage%2Fsvg%2Bxml%2C%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%20100%20100%27%3E%3Ctext%20y%3D%27.9em%27%20font-size%3D%2790%27%3E%F0%9F%8C%B8%3C%2Ftext%3E%3C%2Fsvg%3E%22%2C%22sizes%22%3A%22512x512%22%2C%22type%22%3A%22image%2Fsvg%2Bxml%22%7D%5D%7D">
     
     <title>Nosso Bolso 🌸</title>
     
-    <!-- Tailwind CSS (Estilos) -->
-    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Tailwind CSS (Estilos) com crossorigin para evitar erros silenciosos -->
+    <script src="https://cdn.tailwindcss.com" crossorigin="anonymous"></script>
     <script>
         tailwind.config = {
             darkMode: 'class', // Ativa o Dark Mode via classe
@@ -23,19 +25,23 @@
         }
     </script>
     
-    <!-- Babel (Tradutor do React) -->
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- Babel (Tradutor do React) com crossorigin -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js" crossorigin="anonymous"></script>
 
     <style>
         .hide-scrollbar::-webkit-scrollbar { display: none; }
         .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
         body { -webkit-tap-highlight-color: transparent; transition: background-color 0.3s; }
+        
+        /* Animação suave para o Loading inicial */
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        .animate-fade-in { animation: fadeIn 0.5s ease-in-out; }
     </style>
 </head>
 <body class="bg-pink-50 dark:bg-slate-950">
     <div id="root">
         <!-- Tela de Carregamento Rápida -->
-        <div style="display:flex; height:100vh; align-items:center; justify-content:center; flex-direction:column; gap:12px; color:#ec4899;">
+        <div class="animate-fade-in" style="display:flex; height:100vh; align-items:center; justify-content:center; flex-direction:column; gap:12px; color:#ec4899;">
             <svg class="animate-spin h-10 w-10" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                 <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
@@ -44,13 +50,13 @@
         </div>
     </div>
 
-    <!-- Detector de Erros -->
+    <!-- Detector de Erros Aprimorado -->
     <script>
-        window.onerror = function(message) {
+        window.onerror = function(message, source, lineno, colno, error) {
             document.getElementById('root').innerHTML = 
                 '<div style="padding:20px; color:#e11d48; text-align:center; font-family:sans-serif; height:100vh; display:flex; flex-direction:column; justify-content:center;">' +
                 '<h2 style="font-size:20px; font-weight:bold; margin-bottom:8px;">Ops! Ocorreu um problema.</h2>' +
-                '<p>' + message + '</p>' +
+                '<p style="font-weight:bold;">' + message + '</p>' +
                 '<p style="font-size:12px; color:#888; margin-top:12px;">Se isto persistir, recarregue a página.</p></div>';
         };
     </script>
@@ -60,10 +66,10 @@
         import React, { useState, useMemo, useRef, useEffect } from 'https://esm.sh/react@18.2.0';
         import { createRoot } from 'https://esm.sh/react-dom@18.2.0/client';
         
-        // Importando Firebase
-        import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js';
-        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js';
-        import { getFirestore, collection, doc, setDoc, addDoc, updateDoc, deleteDoc, onSnapshot, serverTimestamp } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js';
+        // Importando Firebase (VERSÕES CORRIGIDAS)
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
+        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
+        import { getFirestore, collection, doc, setDoc, addDoc, updateDoc, deleteDoc, onSnapshot, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
 
         // Importando Ícones
         import { 
@@ -537,7 +543,6 @@
                 const dateStr = new Date().toISOString().split('T')[0];
                 
                 // Payer is the one who has a positive balance (meaning the other owes them, so they receive the mimo)
-                // Actually, if U1 is positive (U2 owes U1), U2 should pay the Mimo to reduce the debt.
                 let payer = stats.u1Bal > 0 ? 'user2' : 'user1';
 
                 await saveDoc('transactions', {
