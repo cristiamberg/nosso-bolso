@@ -16,8 +16,17 @@
     
     <title>Nosso Bolso 🌸</title>
     
-    <!-- Tailwind CSS (Estilos) com crossorigin para evitar erros silenciosos -->
-    <script src="https://cdn.tailwindcss.com" crossorigin="anonymous"></script>
+    <!-- Mapa de Importação para corrigir o erro do react/jsx-runtime -->
+    <script type="importmap">
+        {
+            "imports": {
+                "react/jsx-runtime": "https://esm.sh/react@18.2.0/jsx-runtime"
+            }
+        }
+    </script>
+
+    <!-- Tailwind CSS (Estilos) - CORS Removido -->
+    <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
             darkMode: 'class', // Ativa o Dark Mode via classe
@@ -25,8 +34,8 @@
         }
     </script>
     
-    <!-- Babel (Tradutor do React) com crossorigin -->
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js" crossorigin="anonymous"></script>
+    <!-- Babel (Tradutor do React) - CORS Removido -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
     <style>
         .hide-scrollbar::-webkit-scrollbar { display: none; }
@@ -66,7 +75,7 @@
         import React, { useState, useMemo, useRef, useEffect } from 'https://esm.sh/react@18.2.0';
         import { createRoot } from 'https://esm.sh/react-dom@18.2.0/client';
         
-        // Importando Firebase (VERSÕES CORRIGIDAS)
+        // Importando Firebase
         import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
         import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
         import { getFirestore, collection, doc, setDoc, addDoc, updateDoc, deleteDoc, onSnapshot, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
@@ -380,7 +389,7 @@
 
             const upcomingDates = useMemo(() => dates.filter(d => d.days <= 7 && d.days > 0), [dates]);
 
-            // Formatação e Exportação (MUDADO PARA pt-BR e BRL)
+            // Formatação e Exportação
             const format = (v) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(parseFloat(v) || 0);
             
             const formatDateSafe = (dateString) => {
